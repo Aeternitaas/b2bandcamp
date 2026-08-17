@@ -1,0 +1,49 @@
+services:
+  db:
+    image: mysql:8.4
+    restart: unless-stopped
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?set MYSQL_ROOT_PASSWORD in .env}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-b2b_helper}
+      MYSQL_USER: ${MYSQL_USER:-b2b}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?set MYSQL_PASSWORD in .env}
+    volumes:
+      - db_data:/var/lib/mysql
+    # The database is only reachable from the app container; it is intentionally
+    # not published to the host.
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-p${MYSQL_PASSWORD}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-9185}:9185"
+    environment:
+      PORT: "9185"
+      WEB_DIR: /app/web
+      MYSQL_HOST: db
+      MYSQL_PORT: "3306"
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-b2b_helper}
+      MYSQL_USER: ${MYSQL_USER:-b2b}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?set MYSQL_PASSWORD in .env}
+      SESSION_TTL_DAYS: ${SESSION_TTL_DAYS:-30}
+      ALLOW_REGISTRATION: ${ALLOW_REGISTRATION:-true}
+      # Set to true once the app is served over HTTPS, so cookies are only ever
+      # sent on encrypted connections.
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  db_data:

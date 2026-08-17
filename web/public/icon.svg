@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="b2b/helper">
+  <rect width="512" height="512" rx="112" fill="#0c0e11"/>
+  <!-- Stacked playlist lines with a cyan accent, echoing the app's list view -->
+  <g fill="#33c6e8">
+    <rect x="112" y="150" width="200" height="26" rx="13"/>
+    <rect x="112" y="214" width="150" height="26" rx="13" opacity="0.75"/>
+    <rect x="112" y="278" width="176" height="26" rx="13" opacity="0.5"/>
+  </g>
+  <!-- Play head / note -->
+  <circle cx="344" cy="336" r="54" fill="#33c6e8"/>
+  <rect x="380" y="150" width="22" height="192" rx="11" fill="#33c6e8"/>
+</svg>
