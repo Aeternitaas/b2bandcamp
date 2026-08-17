@@ -138,6 +138,59 @@ proxy and set `COOKIE_SECURE=true`.
 
 ---
 
+## Deploying behind a domain
+
+Nothing in the app hardcodes a hostname. The UI calls `/api` with relative
+paths and builds share links from the address you are browsing, so pointing a
+new FQDN at it needs no code or build changes — the same image works on
+`localhost`, a LAN address and `music.example.com`.
+
+Three settings matter once a reverse proxy is in front:
+
+| Variable | Why |
+|---|---|
+| `COOKIE_SECURE=true` | Session and CSRF cookies are then only sent over HTTPS |
+| `TRUSTED_PROXIES=private` | Restores per-user rate limiting (see below) |
+| `PUBLIC_BASE_URL` | Optional; makes copied share links always name your domain |
+
+**`TRUSTED_PROXIES` is not optional in practice.** Behind a proxy every request
+arrives from the proxy's address, so all users land in the same rate-limit
+bucket and one person's failed logins lock out everybody. Setting it lets the
+server read `X-Forwarded-For` — but only when the immediate peer is one of the
+listed networks, because that header is trivially forged and believing it from
+any client would let anyone bypass the limiters outright.
+
+`private` covers loopback and the RFC1918 ranges, which is what a proxy on the
+same host or docker network will be. Never list a public range.
+
+A minimal nginx front end:
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name music.example.com;
+
+    location / {
+        proxy_pass http://127.0.0.1:9185;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+Two caveats:
+
+- **Serve it at a domain root, not a subpath.** The built assets are referenced
+  from `/assets/...` and the client routes are absolute, so `example.com/b2b/`
+  would need a Vite `base` and a router `basename`. Say the word if you need it.
+- **The audio proxy streams through the server** when the analysis panel is
+  open, so give it a generous `proxy_read_timeout` if you put buffering limits
+  in front of it.
+
+---
+
 ## How the Bandcamp integration works
 
 Bandcamp has no public playlist API, so this app uses the same unauthenticated

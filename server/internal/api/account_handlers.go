@@ -23,7 +23,7 @@ func (s *Server) handleUpdateAccount(w http.ResponseWriter, r *http.Request) {
 	if u == nil {
 		return
 	}
-	if !accountLimiter.allow(clientIP(r)) {
+	if !accountLimiter.allow(s.clientIP(r)) {
 		writeErr(w, http.StatusTooManyRequests, "too many attempts, try again later")
 		return
 	}

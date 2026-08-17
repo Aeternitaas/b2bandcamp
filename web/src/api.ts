@@ -154,11 +154,11 @@ export const api = {
   listShares: () => request<{ shares: ShareLink[] }>('/api/account/shares'),
 
   getShareLink: (playlistId: number) =>
-    request<{ token: string; path: string; visibility?: Visibility }>(
+    request<{ token: string; path: string; url?: string; visibility?: Visibility }>(
       `/api/playlists/${playlistId}/share`),
 
   createShareLink: (playlistId: number) =>
-    request<{ token: string; path: string; visibility: Visibility }>(
+    request<{ token: string; path: string; url?: string; visibility: Visibility }>(
       `/api/playlists/${playlistId}/share`, { method: 'POST' }),
 
   revokeShareLink: (playlistId: number) =>

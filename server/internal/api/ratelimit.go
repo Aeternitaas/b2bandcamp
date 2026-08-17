@@ -3,6 +3,7 @@ package api
 import (
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 )
@@ -54,7 +55,57 @@ func (l *limiter) allow(key string) bool {
 	return true
 }
 
-func clientIP(r *http.Request) string {
+// clientIP identifies the caller for rate-limiting purposes.
+//
+// X-Forwarded-For is only consulted when the immediate peer is a configured
+// trusted proxy — the header is trivially forged, so believing it from an
+// arbitrary client would let anyone sidestep the limiters entirely by sending a
+// different value each request. Conversely, ignoring it behind a real proxy
+// lumps every user into one bucket, so one person's failed logins would lock
+// out everybody.
+func (s *Server) clientIP(r *http.Request) string {
+	peer := directPeer(r)
+	if len(s.cfg.TrustedProxies) == 0 || !s.isTrustedProxy(peer) {
+		return peer
+	}
+
+	// Walk right to left and take the first address that is not itself a proxy
+	// we trust: that is the outermost hop we have any reason to believe.
+	forwarded := r.Header.Get("X-Forwarded-For")
+	parts := strings.Split(forwarded, ",")
+	for i := len(parts) - 1; i >= 0; i-- {
+		candidate := strings.TrimSpace(parts[i])
+		if candidate == "" {
+			continue
+		}
+		if net.ParseIP(candidate) == nil {
+			continue
+		}
+		if !s.isTrustedProxy(candidate) {
+			return candidate
+		}
+	}
+
+	if real := strings.TrimSpace(r.Header.Get("X-Real-IP")); real != "" && net.ParseIP(real) != nil {
+		return real
+	}
+	return peer
+}
+
+func (s *Server) isTrustedProxy(addr string) bool {
+	ip := net.ParseIP(addr)
+	if ip == nil {
+		return false
+	}
+	for _, network := range s.cfg.TrustedProxies {
+		if network.Contains(ip) {
+			return true
+		}
+	}
+	return false
+}
+
+func directPeer(r *http.Request) string {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
 		return r.RemoteAddr

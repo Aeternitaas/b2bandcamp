@@ -222,7 +222,7 @@ export function TrackColumnHeader({
 
       {/* The track-number column has no configurable entry, but sorting back to
           playlist order is the most common thing to want. */}
-      <span className="track-head-cell">
+      <span className="track-head-cell track-head-index">
         <button
           className="track-head-label sortable"
           onClick={() => onSort?.('position')}

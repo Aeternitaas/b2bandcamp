@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api'
-import { copyText, playlistCover } from '../utils'
+import { copyText, playlistCover, shareUrl as buildShareUrl } from '../utils'
 import { Modal } from './Modal'
 import { InviteCollaborators } from './InviteCollaborators'
 import type { Collaborator, Playlist, Visibility } from '../types'
@@ -44,7 +44,7 @@ export function PlaylistSettings({ playlist, isOwner, onClose, onSaved, onDelete
     // owner rotate it just to see it again.
     if (isOwner) {
       api.getShareLink(playlist.id)
-        .then((r) => { if (r.token) setShareUrl(`${window.location.origin}${r.path}`) })
+        .then((r) => { if (r.token) setShareUrl(buildShareUrl(r.path, r.url)) })
         .catch(() => undefined)
     }
   }, [playlist.id, isOwner])
@@ -78,7 +78,7 @@ export function PlaylistSettings({ playlist, isOwner, onClose, onSaved, onDelete
     setError('')
     try {
       const res = await api.createShareLink(playlist.id)
-      setShareUrl(`${window.location.origin}${res.path}`)
+      setShareUrl(buildShareUrl(res.path, res.url))
       if (res.visibility !== visibility) setVisibility(res.visibility)
       onSaved({ ...playlist, visibility: res.visibility, has_share_link: true })
     } catch (e) {

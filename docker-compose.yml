@@ -41,6 +41,9 @@ services:
       # Set to true once the app is served over HTTPS, so cookies are only ever
       # sent on encrypted connections.
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      # Only needed behind a reverse proxy / real domain — see .env.example.
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-}
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}
     depends_on:
       db:
         condition: service_healthy

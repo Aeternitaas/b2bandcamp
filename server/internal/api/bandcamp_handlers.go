@@ -15,7 +15,7 @@ var bcLimiter = newLimiter(240, time.Minute)
 
 // throttle keeps one client from turning this server into a Bandcamp scraper.
 func (s *Server) throttle(w http.ResponseWriter, r *http.Request) bool {
-	if !bcLimiter.allow(clientIP(r)) {
+	if !bcLimiter.allow(s.clientIP(r)) {
 		writeErr(w, http.StatusTooManyRequests, "slow down")
 		return false
 	}

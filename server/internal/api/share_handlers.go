@@ -30,6 +30,7 @@ func (s *Server) handleGetShareLink(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"token":      token,
 		"path":       "/s/" + token,
+		"url":        s.shareURL(token),
 		"visibility": p.Visibility,
 	})
 }
@@ -83,8 +84,19 @@ func (s *Server) handleCreateShareLink(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"token":      token,
 		"path":       "/s/" + token,
+		"url":        s.shareURL(token),
 		"visibility": p.Visibility,
 	})
+}
+
+// shareURL returns an absolute link when a canonical public address is
+// configured, and "" otherwise — in which case the client falls back to the
+// origin the browser is already on, which is right for LAN and dev use.
+func (s *Server) shareURL(token string) string {
+	if s.cfg.PublicBaseURL == "" {
+		return ""
+	}
+	return s.cfg.PublicBaseURL + "/s/" + token
 }
 
 func (s *Server) handleRevokeShareLink(w http.ResponseWriter, r *http.Request) {

@@ -23,7 +23,9 @@
   --radius: 10px;
   --gap: 12px;
   --header-h: 52px;
-  --player-h: 66px;
+  /* Overridden below by the single-row player block; kept as the pre-CSS
+     fallback so layout is sane before that rule is reached. */
+  --player-h: 74px;
 
   --safe-b: env(safe-area-inset-bottom, 0px);
 }
@@ -926,23 +928,9 @@ input[type='checkbox'] { width: auto; height: auto; }
 
 /* ---------- inline analysis panel on the player ---------- */
 
-.player-analysis {
-  max-width: 1100px;
-  margin: 0 auto;
-  padding: 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  border-bottom: 1px solid var(--border);
-  max-height: 46vh;
-  overflow-y: auto;
-}
 
-.analysis-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
+
+
 .analysis-row .stat { flex: 1 1 120px; }
 
 /* ---------- contributor strip under the playlist header ---------- */
@@ -1287,8 +1275,8 @@ input[type='checkbox'] { width: auto; height: auto; }
   .bulk-bar button { flex: 1 1 auto; }
 
   .stat-grid { grid-template-columns: 1fr; }
-  .analysis-row .stat { flex: 1 1 100%; }
-  .player-analysis { max-height: 52vh; }
+  
+  
 }
 
 /* Touch devices get no hover, so anything hover-only needs to be tappable. */
@@ -1364,10 +1352,6 @@ input[type='checkbox'] { width: auto; height: auto; }
   .meta-chip .bpm-cell,
   .meta-chip .key-cell { padding: 0 3px; min-height: 22px; }
 
-  /* Tighten the player: the seek bar sat well clear of the transport row. */
-  .player-inner { gap: 8px; height: 58px; padding: 0 8px; }
-  .player-art { width: 40px; height: 40px; }
-  :root { --player-h: 58px; }
 }
 
 /* Contributor and drag handle share the compact row's right-hand tail. */
@@ -1382,3 +1366,83 @@ input[type='checkbox'] { width: auto; height: auto; }
   font-size: 11.5px;
 }
 .track-meta-line .meta-chip { flex: 0 0 auto; }
+
+/* ==========================================================================
+   Player bar — one fixed-height row
+   ==========================================================================
+   Everything lives on a single line, so the bar never changes height and the
+   page's bottom padding never has to move. As width shrinks, the least
+   essential sections drop out in order rather than wrapping. */
+
+:root { --player-h: 74px; }
+
+.player-inner {
+  height: var(--player-h);
+  gap: 10px;
+  flex-wrap: nowrap;
+}
+
+.p-art { padding: 0; min-height: 0; border: 0; background: none; flex: 0 0 auto; }
+.p-art:hover:not(:disabled) { background: none; }
+
+.p-meta { flex: 1 1 150px; min-width: 0; max-width: 260px; }
+
+.p-transport { display: flex; align-items: center; gap: 2px; flex: 0 0 auto; }
+
+/* The waveform is the scrubber, so it takes the slack. */
+.p-wave { position: relative; flex: 1 1 200px; min-width: 120px; }
+.p-wave .waveform { border: 0; background: transparent; }
+.wave-status { position: absolute; inset: 0; display: grid; place-items: center; }
+
+.p-stats { display: flex; align-items: center; gap: 12px; flex: 0 0 auto; }
+.p-stat { display: flex; flex-direction: column; line-height: 1.15; min-width: 30px; }
+.p-stat-label {
+  font-size: 9.5px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.p-stat-value { font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.p-stat-sub { font-size: 10px; color: var(--dim); }
+
+.p-tempo { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
+.p-tempo .tempo-slider { width: 96px; }
+.p-tempo .p-stat-label { min-width: 46px; text-align: right; }
+.p-pitch { min-height: 26px; padding: 2px 7px; font-size: 10.5px; }
+
+.p-time { flex: 0 0 auto; }
+.p-close { flex: 0 0 auto; }
+
+/* Drop order as the viewport narrows: time, then tempo, then the readouts. */
+@media (max-width: 1200px) { .p-time { display: none; } }
+@media (max-width: 1040px) { .p-tempo { display: none; } }
+@media (max-width: 880px)  { .p-stats { display: none; } }
+@media (max-width: 760px)  { .p-volume { display: none; } }
+
+@media (max-width: 640px) {
+  :root { --player-h: 62px; }
+
+  .player-inner { gap: 8px; padding: 0 8px; }
+  .player-art { width: 40px; height: 40px; }
+  .p-meta { flex: 1 1 auto; max-width: none; }
+  .p-wave { flex: 1 1 90px; min-width: 70px; }
+
+  /* Toggling swaps the metadata for the analysis controls instead of adding a
+     second row, so the bar keeps its height. */
+  .p-stats.show,
+  .p-tempo.show { display: flex; }
+  .p-stats.show { gap: 10px; }
+  .p-tempo.show .tempo-slider { width: 72px; }
+  .p-tempo.show .p-stat-label { min-width: 40px; }
+}
+
+/* The "#" heading must sit over the numbers it labels. Track numbers are
+   right-aligned so their digits line up, and the heading inherits the generic
+   left-aligned label style, which put the two at opposite ends of the column. */
+.track-head-index { justify-content: flex-end; }
+.track-head-index .track-head-label {
+  text-align: right;
+  /* Nudged in from the column edge: the heading glyph is narrower and lighter
+     than the digits below it, so a flush right edge reads as overhanging. */
+  padding-right: 4px;
+}

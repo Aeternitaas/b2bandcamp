@@ -107,6 +107,22 @@ export function NowPlaying({ onClose }: { onClose: () => void }) {
 function AnalysisTab({ progress }: { progress: number }) {
   const player = usePlayer()
   const { analysis } = player
+  const track = player.current
+
+  const overridden = !!track && track.bpm !== null
+  const detectedBpm = analysis.tempo && analysis.tempo.bpm > 0
+    ? analysis.tempo.bpm
+    : track?.detected_bpm ?? null
+
+  const clearOverride = async () => {
+    if (!track || track.playlist_id <= 0) return
+    try {
+      await api.updateTrack(track.playlist_id, track.id, { bpm: null })
+      track.bpm = null // the list refetches on navigation
+    } catch {
+      // A read-only viewer simply cannot clear it.
+    }
+  }
 
   const shift = player.preservePitch ? 0 : semitonesForRate(player.rate)
   const shownKey = analysis.key && shift !== 0 ? transposeKey(analysis.key, shift) : analysis.key
@@ -147,6 +163,23 @@ function AnalysisTab({ progress }: { progress: number }) {
             </div>
             {analysis.tempo && (
               <div className="faint small">{confidenceLabel(analysis.tempo.confidence)}</div>
+            )}
+
+            {/* Overrides are deliberate, so say when one is in force and give
+                the way back to the detected value. */}
+            {track && track.playlist_id > 0 && overridden && (
+              <div className="faint small">
+                manual {Math.round(track.bpm!)}
+                {detectedBpm ? ` · detected ${Math.round(detectedBpm)}` : ''}
+                <button
+                  className="ghost icon"
+                  style={{ minHeight: 0, padding: '1px 5px', marginLeft: 4 }}
+                  onClick={() => void clearOverride()}
+                  title="Discard the manual value and use the detected tempo"
+                >
+                  use detected
+                </button>
+              </div>
             )}
           </div>
 

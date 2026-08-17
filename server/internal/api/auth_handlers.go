@@ -67,7 +67,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusForbidden, "registration is disabled on this instance")
 		return
 	}
-	if !registerLimiter.allow(clientIP(r)) {
+	if !registerLimiter.allow(s.clientIP(r)) {
 		writeErr(w, http.StatusTooManyRequests, "too many sign-up attempts, try again later")
 		return
 	}
@@ -131,7 +131,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	req.Login = strings.TrimSpace(req.Login)
 
-	if !loginLimiter.allow(clientIP(r)) {
+	if !loginLimiter.allow(s.clientIP(r)) {
 		writeErr(w, http.StatusTooManyRequests, "too many sign-in attempts, try again later")
 		return
 	}

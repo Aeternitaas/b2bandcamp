@@ -68,6 +68,19 @@ export function debounce<A extends unknown[]>(fn: (...args: A) => void, ms: numb
  * the app is reached over plain http on a LAN address — which is exactly how
  * this gets used.
  */
+/**
+ * Absolute URL for a share link.
+ *
+ * Prefers the canonical address the server was configured with (PUBLIC_BASE_URL),
+ * so links copied from a LAN address still point at the public hostname. Falls
+ * back to whatever origin the browser is on, which is correct for LAN-only and
+ * development use.
+ */
+export function shareUrl(path: string, canonical?: string): string {
+  if (canonical) return canonical
+  return `${window.location.origin}${path}`
+}
+
 export async function copyText(text: string): Promise<boolean> {
   try {
     if (navigator.clipboard?.writeText) {
