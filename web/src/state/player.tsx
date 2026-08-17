@@ -5,6 +5,17 @@ import type { ReactNode } from 'react'
 import { api } from '../api'
 import { artUrl } from '../utils'
 import type { Track } from '../types'
+import type { KeyResult, TempoResult } from '../audio/analysis'
+import { analyzeTrack } from '../audio/analyzeTrack'
+
+export interface Analysis {
+  status: 'idle' | 'loading' | 'ready' | 'error'
+  trackId: number | null
+  peaks: Float32Array | null
+  tempo: TempoResult | null
+  key: KeyResult | null
+  error: string
+}
 
 interface PlayerValue {
   queue: Track[]
@@ -14,15 +25,48 @@ interface PlayerValue {
   position: number
   duration: number
   error: string
+
+  volume: number
+  muted: boolean
+  rate: number
+  preservePitch: boolean
+  analysis: Analysis
+
   play: (queue: Track[], startIndex: number) => void
   toggle: () => void
   next: () => void
   prev: () => void
   seek: (seconds: number) => void
   stop: () => void
+  setVolume: (v: number) => void
+  toggleMute: () => void
+  setRate: (r: number) => void
+  setPreservePitch: (on: boolean) => void
+  analyze: () => void
 }
 
 const PlayerContext = createContext<PlayerValue | null>(null)
+
+const VOLUME_KEY = 'b2bandcamp:volume'
+const PLAYBACK_KEY = 'b2bandcamp:playback'
+
+/** Discard a restored position older than this — resuming a track from weeks
+ *  ago is more surprising than useful. */
+const RESUME_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
+
+/** Queues longer than this are not persisted whole; only the current track is,
+ *  so a 2000-track playlist cannot fill localStorage. */
+const MAX_PERSISTED_QUEUE = 400
+
+interface PersistedPlayback {
+  queue: Track[]
+  index: number
+  position: number
+  savedAt: number
+}
+const IDLE_ANALYSIS: Analysis = {
+  status: 'idle', trackId: null, peaks: null, tempo: null, key: null, error: '',
+}
 
 export function PlayerProvider({ children }: { children: ReactNode }) {
   // One audio element for the lifetime of the app. Reusing it matters on iOS,
@@ -41,16 +85,29 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const [duration, setDuration] = useState(0)
   const [error, setError] = useState('')
 
+  const [volume, setVolumeState] = useState(() => {
+    const stored = Number(localStorage.getItem(VOLUME_KEY))
+    return Number.isFinite(stored) && stored > 0 ? Math.min(1, stored) : 1
+  })
+  const [muted, setMuted] = useState(false)
+  const [rate, setRateState] = useState(1)
+  const [preservePitch, setPreservePitchState] = useState(true)
+  const [analysis, setAnalysis] = useState<Analysis>(IDLE_ANALYSIS)
+
+  // Position to apply once the restored track reports its duration; seeking
+  // before metadata arrives is silently ignored by the audio element.
+  const pendingSeekRef = useRef<number | null>(null)
+
   const current = index >= 0 && index < queue.length ? queue[index] : null
 
-  // Keep a ref of the queue so audio event handlers, which are bound once, can
+  // Keep refs of the queue so audio event handlers, which are bound once, can
   // advance without being re-registered on every state change.
   const queueRef = useRef(queue)
   const indexRef = useRef(index)
   queueRef.current = queue
   indexRef.current = index
 
-  const loadTrack = useCallback((track: Track, autoplay: boolean) => {
+  const loadTrack = useCallback((track: Track, autoplay: boolean, resumeAt?: number) => {
     const audio = audioRef.current
     if (!audio) return
 
@@ -62,12 +119,14 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     setError('')
     setPosition(0)
     setDuration(track.duration || 0)
+    setAnalysis(IDLE_ANALYSIS) // analysis belongs to the previous track
+
+    pendingSeekRef.current = resumeAt && resumeAt > 1 ? resumeAt : null
     audio.src = api.streamUrl(track.bc_track_id, track.bc_band_id)
     audio.load()
 
     if (autoplay) {
       audio.play().catch((err: unknown) => {
-        // Autoplay rejection is expected until the user has interacted.
         if (err instanceof DOMException && err.name === 'NotAllowedError') {
           setPlaying(false)
           return
@@ -83,7 +142,6 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       setError('None of these tracks can be streamed.')
       return
     }
-    // Map the requested index through the filter so the right track starts.
     const wanted = nextQueue[startIndex]
     const mapped = wanted ? playable.findIndex((t) => t.id === wanted.id) : 0
 
@@ -108,7 +166,6 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
   const prev = useCallback(() => {
     const audio = audioRef.current
-    // Match the usual convention: restart the track unless we're near the start.
     if (audio && audio.currentTime > 3) {
       audio.currentTime = 0
       return
@@ -147,17 +204,178 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     setPlaying(false)
     setPosition(0)
     setDuration(0)
+    setAnalysis(IDLE_ANALYSIS)
+    try {
+      localStorage.removeItem(PLAYBACK_KEY)
+    } catch {
+      // ignored
+    }
   }, [])
 
-  // Bind audio element events once.
+  // Restore the last track on load. Playback stays paused: browsers block
+  // autoplay without a user gesture, so starting here would either fail or be
+  // unwelcome — the track is simply cued up where it left off.
+  useEffect(() => {
+    let saved: PersistedPlayback | null = null
+    try {
+      const raw = localStorage.getItem(PLAYBACK_KEY)
+      saved = raw ? (JSON.parse(raw) as PersistedPlayback) : null
+    } catch {
+      saved = null
+    }
+
+    if (!saved || !Array.isArray(saved.queue) || saved.queue.length === 0) return
+    if (Date.now() - (saved.savedAt ?? 0) > RESUME_MAX_AGE_MS) {
+      localStorage.removeItem(PLAYBACK_KEY)
+      return
+    }
+
+    const index = Math.min(Math.max(0, saved.index ?? 0), saved.queue.length - 1)
+    const track = saved.queue[index]
+    if (!track?.bc_band_id) return
+
+    setQueue(saved.queue)
+    setIndex(index)
+    loadTrack(track, false, saved.position)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // ---------- volume / rate ----------
+
+  const setVolume = useCallback((v: number) => {
+    const clamped = Math.min(1, Math.max(0, v))
+    setVolumeState(clamped)
+    setMuted(clamped === 0)
+    localStorage.setItem(VOLUME_KEY, String(clamped))
+  }, [])
+
+  const toggleMute = useCallback(() => setMuted((m) => !m), [])
+
+  // Bounded to +/-20%, the range of a DJ pitch fader. Beyond that the
+  // time-stretcher audibly degrades and the tempo is no longer the same track.
+  const setRate = useCallback((r: number) => {
+    setRateState(Math.min(1.2, Math.max(0.8, r)))
+  }, [])
+
+  const setPreservePitch = useCallback((on: boolean) => setPreservePitchState(on), [])
+
+  // Apply volume/mute/rate to the element whenever they change.
+  useEffect(() => {
+    const audio = audioRef.current
+    if (!audio) return
+    audio.volume = volume
+    audio.muted = muted
+  }, [volume, muted])
+
+  useEffect(() => {
+    const audio = audioRef.current
+    if (!audio) return
+    audio.playbackRate = rate
+    // Time-stretch instead of resampling, so changing tempo does not transpose
+    // the track. Supported in current Chrome/Firefox/Safari.
+    if ('preservesPitch' in audio) audio.preservesPitch = preservePitch
+  }, [rate, preservePitch])
+
+  // Persisting the whole queue means the rest of the playlist survives a
+  // refresh too, not just the one track.
+  const lastSaveRef = useRef(0)
+  const persist = useCallback((force = false) => {
+    const q = queueRef.current
+    const i = indexRef.current
+    const audio = audioRef.current
+    if (!audio || q.length === 0 || i < 0) return
+
+    const now = Date.now()
+    if (!force && now - lastSaveRef.current < 5000) return
+    lastSaveRef.current = now
+
+    const payload: PersistedPlayback = {
+      queue: q.length > MAX_PERSISTED_QUEUE ? [q[i]] : q,
+      index: q.length > MAX_PERSISTED_QUEUE ? 0 : i,
+      position: audio.currentTime,
+      savedAt: now,
+    }
+    try {
+      localStorage.setItem(PLAYBACK_KEY, JSON.stringify(payload))
+    } catch {
+      // Quota or private mode; resuming is a convenience, not a requirement.
+    }
+  }, [])
+
+  // Save on the way out, including the mobile case where the tab is frozen
+  // rather than unloaded.
+  useEffect(() => {
+    const onHide = () => persist(true)
+    window.addEventListener('pagehide', onHide)
+    document.addEventListener('visibilitychange', onHide)
+    return () => {
+      window.removeEventListener('pagehide', onHide)
+      document.removeEventListener('visibilitychange', onHide)
+    }
+  }, [persist])
+
+  // ---------- offline analysis ----------
+
+  const requestIdRef = useRef(0)
+
+  const analyze = useCallback(() => {
+    const track = queueRef.current[indexRef.current]
+    if (!track || !track.bc_band_id) return
+
+    setAnalysis({ ...IDLE_ANALYSIS, status: 'loading', trackId: track.id })
+    const requestId = ++requestIdRef.current
+
+    analyzeTrack(track.bc_track_id, track.bc_band_id)
+      .then((result) => {
+        if (requestId !== requestIdRef.current) return // superseded
+        setAnalysis({
+          status: 'ready',
+          trackId: track.id,
+          peaks: result.peaks,
+          tempo: result.tempo,
+          key: result.key,
+          error: '',
+        })
+      })
+      .catch((err: Error) => {
+        if (requestId !== requestIdRef.current) return
+        setAnalysis({ ...IDLE_ANALYSIS, status: 'error', error: err.message })
+      })
+  }, [])
+
+  // ---------- audio element events ----------
+
+  // Loading a new source resets playbackRate in some browsers, so the current
+  // value has to be reapplied from a ref the once-bound handler can read.
+  const rateRef = useRef(rate)
+  rateRef.current = rate
+
   useEffect(() => {
     const audio = audioRef.current
     if (!audio) return
 
     const onPlay = () => setPlaying(true)
-    const onPause = () => setPlaying(false)
-    const onTime = () => setPosition(audio.currentTime)
-    const onMeta = () => { if (Number.isFinite(audio.duration)) setDuration(audio.duration) }
+    const onPause = () => {
+      setPlaying(false)
+      persistRef.current(true)
+    }
+    const onTime = () => {
+      setPosition(audio.currentTime)
+      persistRef.current()
+    }
+    const onMeta = () => {
+      if (Number.isFinite(audio.duration)) setDuration(audio.duration)
+      audio.playbackRate = rateRef.current
+
+      const resumeAt = pendingSeekRef.current
+      if (resumeAt !== null) {
+        pendingSeekRef.current = null
+        if (Number.isFinite(audio.duration) && resumeAt < audio.duration - 1) {
+          audio.currentTime = resumeAt
+          setPosition(resumeAt)
+        }
+      }
+    }
     const onEnded = () => next()
     const onError = () => {
       if (audio.src) setError('Could not load this track from Bandcamp.')
@@ -180,8 +398,10 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     }
   }, [next])
 
-  // Lock-screen / notification controls. This is what makes the app usable as a
-  // music player on a phone once the screen is off.
+  const persistRef = useRef<(force?: boolean) => void>(() => {})
+  persistRef.current = persist
+
+  // Lock-screen / notification controls.
   useEffect(() => {
     if (!('mediaSession' in navigator) || !current) return
 
@@ -210,8 +430,16 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   }, [playing])
 
   const value = useMemo(
-    () => ({ queue, index, current, playing, position, duration, error, play, toggle, next, prev, seek, stop }),
-    [queue, index, current, playing, position, duration, error, play, toggle, next, prev, seek, stop],
+    () => ({
+      queue, index, current, playing, position, duration, error,
+      volume, muted, rate, preservePitch, analysis,
+      play, toggle, next, prev, seek, stop,
+      setVolume, toggleMute, setRate, setPreservePitch, analyze,
+    }),
+    [queue, index, current, playing, position, duration, error,
+      volume, muted, rate, preservePitch, analysis,
+      play, toggle, next, prev, seek, stop,
+      setVolume, toggleMute, setRate, setPreservePitch, analyze],
   )
 
   return <PlayerContext.Provider value={value}>{children}</PlayerContext.Provider>

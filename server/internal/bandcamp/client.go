@@ -329,7 +329,7 @@ func (c *Client) Details(ctx context.Context, itemType string, itemID, bandID in
 		BandcampURL string `json:"bandcamp_url"`
 		ArtID       *int64 `json:"art_id"`
 		About       string `json:"about"`
-		ReleaseDate string `json:"release_date"`
+		ReleaseDate int64  `json:"release_date"` // unix seconds, not a string
 		AlbumID     *int64 `json:"album_id"`
 		AlbumTitle  string `json:"album_title"`
 		TralbumArt  string `json:"tralbum_artist"`
@@ -368,7 +368,10 @@ func (c *Client) Details(ctx context.Context, itemType string, itemID, bandID in
 	t := &Tralbum{
 		ID: raw.ID, Type: raw.Type, Title: raw.Title, Artist: artist,
 		BandID: raw.Band.BandID, ArtID: raw.ArtID, URL: raw.BandcampURL,
-		About: raw.About, ReleaseDate: raw.ReleaseDate,
+		About: raw.About,
+	}
+	if raw.ReleaseDate > 0 {
+		t.ReleaseDate = time.Unix(raw.ReleaseDate, 0).UTC().Format("2006-01-02")
 	}
 	if t.BandID == 0 {
 		t.BandID = bandID
@@ -400,6 +403,13 @@ func (c *Client) Details(ctx context.Context, itemType string, itemID, bandID in
 		if tr.ArtID == nil {
 			tr.ArtID = raw.ArtID
 		}
+		// A tralbum_type=t response leaves the nested track_url null and puts the
+		// real page URL at the top level, so single-track adds would otherwise be
+		// saved with no link back to Bandcamp. For an album this degrades to the
+		// album page, which is still a useful destination.
+		if tr.TrackURL == "" {
+			tr.TrackURL = t.URL
+		}
 		if tr.ArtID != nil {
 			tr.ArtURL = ArtURL(*tr.ArtID, 9)
 		}
@@ -429,10 +439,7 @@ func (c *Client) StreamURL(ctx context.Context, trackID, bandID int64) (string, 
 
 // ---------- fans and wishlists ----------
 
-var (
-	pagedataRe = regexp.MustCompile(`id="pagedata"[^>]*data-blob="([^"]*)"`)
-	fanPathRe  = regexp.MustCompile(`^/([A-Za-z0-9_-]+)/?$`)
-)
+var pagedataRe = regexp.MustCompile(`id="pagedata"[^>]*data-blob="([^"]*)"`)
 
 // Fan resolves a Bandcamp username, profile URL, or numeric fan id to the fan's
 // identity plus their wishlist size.
@@ -442,11 +449,15 @@ func (c *Client) Fan(ctx context.Context, input string) (*Fan, error) {
 		return nil, ErrNotFound
 	}
 
-	// Accept a full profile URL as well as a bare username.
+	// Accept a full profile URL as well as a bare username. Take the first path
+	// segment so trailing paths and query strings do not break the lookup.
 	if strings.Contains(name, "bandcamp.com") {
 		if u, err := url.Parse(ensureScheme(name)); err == nil {
-			if m := fanPathRe.FindStringSubmatch(u.Path); m != nil {
-				name = m[1]
+			for _, seg := range strings.Split(u.Path, "/") {
+				if seg != "" {
+					name = seg
+					break
+				}
 			}
 		}
 	}
@@ -455,6 +466,28 @@ func (c *Client) Fan(ctx context.Context, input string) (*Fan, error) {
 	key := "fan:" + strings.ToLower(name)
 	if v, ok := c.cache.get(key); ok {
 		return v.(*Fan), nil
+	}
+
+	fan, err := c.fanByUsername(ctx, name)
+	if err == nil {
+		c.cache.set(key, fan, fanTTL)
+		return fan, nil
+	}
+
+	// The profile path only works for the exact URL slug. People typically know
+	// their display name instead, so fall back to Bandcamp's fan search and
+	// resolve that to a real profile.
+	if fan, ferr := c.fanBySearch(ctx, name); ferr == nil {
+		c.cache.set(key, fan, fanTTL)
+		return fan, nil
+	}
+	return nil, err
+}
+
+// fanByUsername reads a fan's identity straight off their profile page.
+func (c *Client) fanByUsername(ctx context.Context, name string) (*Fan, error) {
+	if name == "" {
+		return nil, ErrNotFound
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://bandcamp.com/"+url.PathEscape(name), nil)
@@ -511,9 +544,50 @@ func (c *Client) Fan(ctx context.Context, input string) (*Fan, error) {
 	if blob.FanData.Photo != nil {
 		f.ImageURL = bandImageURL(*blob.FanData.Photo, 22)
 	}
-
-	c.cache.set(key, f, fanTTL)
+	if f.Username == "" {
+		f.Username = name
+	}
 	return f, nil
+}
+
+// fanBySearch resolves a display name (or any near-miss the user typed) to a
+// real fan profile using Bandcamp's fan search index.
+func (c *Client) fanBySearch(ctx context.Context, query string) (*Fan, error) {
+	results, err := c.Search(ctx, query, "f")
+	if err != nil {
+		return nil, err
+	}
+
+	want := strings.ToLower(strings.TrimSpace(query))
+	var best *SearchResult
+
+	// Prefer an exact match on username, then on display name, then whatever
+	// the index ranked first.
+	for _, r := range results {
+		if r.Type != "f" {
+			continue
+		}
+		if strings.ToLower(r.Username) == want {
+			best = r
+			break
+		}
+		if best == nil || strings.ToLower(r.Name) == want {
+			if best == nil || strings.ToLower(best.Username) != want {
+				best = r
+			}
+		}
+	}
+	if best == nil {
+		return nil, ErrNotFound
+	}
+
+	// Re-read the profile so the wishlist count is accurate.
+	if best.Username != "" {
+		if f, err := c.fanByUsername(ctx, best.Username); err == nil {
+			return f, nil
+		}
+	}
+	return &Fan{FanID: best.ID, Username: best.Username, Name: best.Name, ImageURL: best.ArtURL}, nil
 }
 
 // Wishlist pages through a fan's wishlist. Pass an empty token for the first

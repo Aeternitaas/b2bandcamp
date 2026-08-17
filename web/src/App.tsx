@@ -1,8 +1,10 @@
-import { Link, Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { Link, Navigate, Route, Routes } from 'react-router-dom'
 import { Player } from './components/Player'
+import { SettingsPage } from './pages/SettingsPage'
 import { AuthPage } from './pages/AuthPage'
 import { PlaylistPage } from './pages/PlaylistPage'
 import { PlaylistsPage } from './pages/PlaylistsPage'
+import { ProfilePage } from './pages/ProfilePage'
 import { SharePage } from './pages/SharePage'
 import { useAuth } from './state/auth'
 
@@ -10,11 +12,16 @@ function Header() {
   const { user, logout } = useAuth()
   return (
     <header className="header">
-      <Link to="/" className="brand">b2b<span>/</span>helper</Link>
+      <Link to="/" className="brand">b2<span>bandcamp</span></Link>
       <div className="spacer" />
       {user ? (
         <>
-          <span className="dim small truncate" style={{ maxWidth: 140 }}>{user.username}</span>
+          <Link to="/" className="ghost icon" style={{ display: 'inline-flex', alignItems: 'center' }}>
+            Playlists
+          </Link>
+          <Link to="/settings" className="ghost icon" style={{ display: 'inline-flex', alignItems: 'center' }}>
+            Settings
+          </Link>
           <button className="ghost icon" onClick={() => void logout()}>Sign out</button>
         </>
       ) : (
@@ -22,20 +29,6 @@ function Header() {
       )}
     </header>
   )
-}
-
-/** Routes that need an account; share links deliberately do not. */
-function Protected({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth()
-  const location = useLocation()
-
-  if (loading) {
-    return <div className="row"><div className="spin" /> <span className="dim">Loading…</span></div>
-  }
-  if (!user) {
-    return <Navigate to="/" replace state={{ from: location.pathname }} />
-  }
-  return <>{children}</>
 }
 
 function Home() {
@@ -53,8 +46,12 @@ export default function App() {
       <main className="main">
         <Routes>
           <Route path="/" element={<Home />} />
-          <Route path="/p/:id" element={<Protected><PlaylistPage /></Protected>} />
+          {/* Not wrapped in Protected: public playlists are viewable by anyone,
+              and the API decides what an anonymous caller may see. */}
+          <Route path="/p/:id" element={<PlaylistPage />} />
           <Route path="/s/:token" element={<SharePage />} />
+          <Route path="/u/:username" element={<ProfilePage />} />
+          <Route path="/settings" element={<SettingsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>

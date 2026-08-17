@@ -136,6 +136,76 @@ CREATE TABLE IF NOT EXISTS playlist_collaborators (
   CONSTRAINT fk_collab_playlist FOREIGN KEY (playlist_id) REFERENCES playlists (id) ON DELETE CASCADE,
   CONSTRAINT fk_collab_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`},
+
+	// The wishlist source is chosen per session rather than saved on the
+	// playlist, so these columns are no longer written or read.
+	{"006_drop_base_fan", `
+ALTER TABLE playlists
+  DROP COLUMN base_fan_id,
+  DROP COLUMN base_fan_username`},
+
+	// The raw share token is kept so an owner can look their invite link up
+	// again instead of being forced to rotate it. Lookups still go through the
+	// hash; this column is only ever read back to the owner.
+	{"007_share_token_plain", `
+ALTER TABLE playlists
+  ADD COLUMN share_token VARCHAR(32) NULL AFTER share_token_hash`},
+
+	// An optional link to the user's Bandcamp profile, plus the avatar shown
+	// against tracks they add.
+	{"008_user_profile", `
+ALTER TABLE users
+  ADD COLUMN bandcamp_username VARCHAR(100)   NULL,
+  ADD COLUMN bandcamp_fan_id   BIGINT UNSIGNED NULL,
+  ADD COLUMN avatar_url        VARCHAR(500)   NULL`},
+
+	// Detected (or hand-corrected) tempo, shown in the track list.
+	{"009_track_bpm", `
+ALTER TABLE playlist_tracks
+  ADD COLUMN bpm DOUBLE NULL AFTER duration`},
+
+	// Hand-entered key override, mirroring the tempo override: detection is a
+	// heuristic and gets keys wrong, so the displayed value must be correctable
+	// without discarding what analysis found.
+	{"011_track_key_override", `
+ALTER TABLE playlist_tracks
+  ADD COLUMN key_override VARCHAR(8) NULL AFTER bpm`},
+
+	// Before tempo detection and manual overrides were separated, analysis wrote
+	// its results straight into playlist_tracks.bpm. Those rows now render as
+	// though a person had typed them, which is wrong and misleading.
+	//
+	// Two signatures identify an auto-written value: it matches the cached
+	// detection for that track, or it has a fractional part — the detector
+	// reports one decimal place, while a person types a whole number. This runs
+	// once, so it cannot affect anything entered from here on.
+	{"012_clear_auto_bpm_overrides", `
+UPDATE playlist_tracks t
+  LEFT JOIN track_analysis a ON a.bc_track_id = t.bc_track_id
+   SET t.bpm = NULL
+ WHERE t.bpm IS NOT NULL
+   AND ((a.bpm IS NOT NULL AND ABS(t.bpm - a.bpm) < 0.05)
+        OR t.bpm <> ROUND(t.bpm))`},
+
+	// Cached audio analysis, keyed by Bandcamp track id rather than by playlist
+	// row: the audio for a given track is identical wherever it appears, so one
+	// analysis serves every playlist and every user. analyzer_version lets a
+	// change to the detection algorithm invalidate stale rows.
+	{"010_track_analysis", `
+CREATE TABLE IF NOT EXISTS track_analysis (
+  bc_track_id      BIGINT UNSIGNED NOT NULL,
+  analyzer_version INT             NOT NULL,
+  bpm              DOUBLE          NULL,
+  bpm_confidence   DOUBLE          NULL,
+  key_name         VARCHAR(24)     NULL,
+  key_camelot      VARCHAR(8)      NULL,
+  key_tonic        TINYINT         NULL,
+  key_scale        VARCHAR(8)      NULL,
+  key_confidence   DOUBLE          NULL,
+  peaks            VARBINARY(2048) NULL,
+  analyzed_at      DATETIME        NOT NULL,
+  PRIMARY KEY (bc_track_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`},
 }
 
 func (s *Store) migrate(ctx context.Context) error {

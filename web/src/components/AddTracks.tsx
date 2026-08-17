@@ -4,6 +4,7 @@ import { Modal } from './Modal'
 import { TralbumPanel } from './TralbumPanel'
 import { debounce, looksLikeBandcampUrl } from '../utils'
 import type { SearchResult, TrackRef } from '../types'
+import { Icon } from './Icon'
 
 interface Props {
   onClose: () => void
@@ -118,7 +119,7 @@ export function AddTracks({ onClose, onAdd, onAddUrl }: Props) {
 
           {isUrl && (
             <button className="primary" onClick={submitUrl} disabled={addingUrl}>
-              {addingUrl ? <div className="spin" /> : '+'} Add from link
+              {addingUrl ? <div className="spin" /> : <Icon name="plus" />} Add from link
             </button>
           )}
 
@@ -155,7 +156,7 @@ export function AddTracks({ onClose, onAdd, onAddUrl }: Props) {
               >
                 {r.art_url
                   ? <img className="cover" style={{ width: 40, height: 40 }} src={r.art_url} alt="" loading="lazy" />
-                  : <div className="cover" style={{ width: 40, height: 40 }}>♪</div>}
+                  : <div className="cover" style={{ width: 40, height: 40 }}><Icon name="music" size={18} /></div>}
 
                 <span className="track-meta">
                   <span className="track-title truncate" style={{ display: 'block' }}>{r.name}</span>

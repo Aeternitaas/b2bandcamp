@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log"
+	"mime"
 	"net/http"
 	"os"
 	"os/signal"
@@ -12,15 +13,15 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/aeternitaas/b2b_helper/server/internal/api"
-	"github.com/aeternitaas/b2b_helper/server/internal/bandcamp"
-	"github.com/aeternitaas/b2b_helper/server/internal/config"
-	"github.com/aeternitaas/b2b_helper/server/internal/store"
+	"github.com/aeternitaas/b2bandcamp/server/internal/api"
+	"github.com/aeternitaas/b2bandcamp/server/internal/bandcamp"
+	"github.com/aeternitaas/b2bandcamp/server/internal/config"
+	"github.com/aeternitaas/b2bandcamp/server/internal/store"
 )
 
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lmsgprefix)
-	log.SetPrefix("[b2b] ")
+	log.SetPrefix("[b2bandcamp] ")
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -83,6 +84,15 @@ func purgeSessions(ctx context.Context, st *store.Store) {
 			return
 		case <-ticker.C:
 		}
+	}
+}
+
+func init() {
+	// Go's MIME table has no entry for .webmanifest, so http.FileServer would
+	// sniff it as text/plain and browsers can reject the manifest on that
+	// basis, making the app non-installable.
+	if err := mime.AddExtensionType(".webmanifest", "application/manifest+json"); err != nil {
+		log.Printf("registering webmanifest mime type: %v", err)
 	}
 }
 

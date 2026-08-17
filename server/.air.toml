@@ -1,0 +1,24 @@
+# Live-reload config for the Go server in development.
+# See Dockerfile.dev / docker-compose.dev.yml.
+
+root = "."
+tmp_dir = ".air-tmp"
+
+[build]
+  cmd = "go build -o ./.air-tmp/server ."
+  bin = "./.air-tmp/server"
+  include_ext = ["go", "toml"]
+  exclude_dir = [".air-tmp", "vendor"]
+  # Test files should not trigger a server restart.
+  exclude_regex = ["_test\\.go"]
+  # Wait briefly so a burst of saves rebuilds once rather than repeatedly.
+  delay = 400
+  stop_on_error = false
+  send_interrupt = true
+  kill_delay = 2000
+
+[log]
+  time = true
+
+[misc]
+  clean_on_exit = true

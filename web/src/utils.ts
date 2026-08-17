@@ -27,9 +27,19 @@ export function artUrl(artId: number | null | undefined, format: 3 | 9 = 3): str
   return artId ? `https://f4.bcbits.com/img/a${artId}_${format}.jpg` : ''
 }
 
-/** The image to show for a playlist: an explicit cover, else the first track. */
-export function playlistCover(coverUrl: string, tracks: Track[], format: 3 | 9 = 3): string {
-  if (coverUrl) return coverUrl
+/**
+ * The image to show for a playlist: the explicit cover if one is set, otherwise
+ * the album art of its first track. `cover_art_id` is computed server-side so
+ * list views work without loading tracks; `tracks` is an extra fallback for
+ * views that already have them.
+ */
+export function playlistCover(
+  playlist: { cover_url: string; cover_art_id: number | null },
+  tracks: Track[] = [],
+  format: 3 | 9 = 3,
+): string {
+  if (playlist.cover_url) return playlist.cover_url
+  if (playlist.cover_art_id) return artUrl(playlist.cover_art_id, format)
   const withArt = tracks.find((t) => t.art_id)
   return withArt ? artUrl(withArt.art_id, format) : ''
 }
@@ -48,6 +58,40 @@ export function debounce<A extends unknown[]>(fn: (...args: A) => void, ms: numb
   return (...args: A) => {
     if (timer) clearTimeout(timer)
     timer = setTimeout(() => fn(...args), ms)
+  }
+}
+
+/**
+ * Copies text, falling back for insecure contexts.
+ *
+ * navigator.clipboard is only exposed in a secure context, so it is absent when
+ * the app is reached over plain http on a LAN address — which is exactly how
+ * this gets used.
+ */
+export async function copyText(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text)
+      return true
+    }
+  } catch {
+    // fall through to the legacy path
+  }
+
+  const field = document.createElement('textarea')
+  field.value = text
+  field.setAttribute('readonly', '')
+  field.style.position = 'fixed'
+  field.style.opacity = '0'
+  document.body.appendChild(field)
+  try {
+    field.select()
+    field.setSelectionRange(0, text.length)
+    return document.execCommand('copy')
+  } catch {
+    return false
+  } finally {
+    document.body.removeChild(field)
   }
 }
 

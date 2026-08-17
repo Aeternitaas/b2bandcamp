@@ -6,6 +6,9 @@ export interface User {
   username: string
   email?: string
   created_at: string
+  bandcamp_username?: string
+  bandcamp_fan_id?: number
+  avatar_url?: string
 }
 
 export interface Playlist {
@@ -15,10 +18,9 @@ export interface Playlist {
   title: string
   description: string
   cover_url: string
+  cover_art_id: number | null
   visibility: Visibility
   has_share_link: boolean
-  base_fan_id: number | null
-  base_fan_username: string
   sort_index: number
   track_count: number
   duration_seconds: number
@@ -38,10 +40,32 @@ export interface Track {
   artist: string
   album_title: string
   duration: number
+  /** Hand-entered override for this row; null means use detected_bpm. */
+  bpm: number | null
+  /** Hand-entered Camelot code; empty means use key_camelot from analysis. */
+  key_override: string
+  /** From the shared analysis cache. */
+  detected_bpm: number | null
+  key_camelot: string
+  key_name: string
   art_id: number | null
   track_url: string
   added_by: number | null
   added_at: string
+  added_by_name: string
+  added_by_avatar: string
+}
+
+export interface ShareLink {
+  playlist_id: number
+  title: string
+  visibility: Visibility
+  token: string
+  cover_url: string
+  cover_art_id: number | null
+  track_count: number
+  collaborators: number
+  updated_at: string
 }
 
 export interface Collaborator {
@@ -72,6 +96,14 @@ export interface BCTrack {
   album_id: number | null
   band_id: number
   duration: number
+  /** Hand-entered override for this row; null means use detected_bpm. */
+  bpm: number | null
+  /** Hand-entered Camelot code; empty means use key_camelot from analysis. */
+  key_override: string
+  /** From the shared analysis cache. */
+  detected_bpm: number | null
+  key_camelot: string
+  key_name: string
   art_id: number | null
   art_url: string
   track_url: string
@@ -115,6 +147,14 @@ export interface Fan {
   name: string
   image_url: string
   wishlist_count: number
+}
+
+/** A b2bandcamp account, as returned by the collaborator invite search. */
+export interface AccountSummary {
+  id: number
+  username: string
+  created_at: string
+  avatar_url?: string
 }
 
 /** A reference to something on Bandcamp that can be added to a playlist. */

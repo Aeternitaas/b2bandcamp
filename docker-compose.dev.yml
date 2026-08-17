@@ -1,0 +1,84 @@
+# Development stack with hot reload on both halves.
+#
+#   docker compose -f docker-compose.dev.yml up
+#
+# Open http://<host>:5173 — Vite serves the UI with hot module replacement and
+# proxies /api to the Go server, which air rebuilds on save.
+#
+# This declares its own project name so it never touches the production stack's
+# containers or volumes; without it Compose derives the project from the
+# directory and both stacks fight over the same container names. The dev API
+# also defaults to a different port, so the two can run side by side.
+name: b2bandcamp-dev
+
+services:
+  db:
+    image: mysql:8.4
+    restart: unless-stopped
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?set MYSQL_ROOT_PASSWORD in .env}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-b2bandcamp}
+      MYSQL_USER: ${MYSQL_USER:-b2bandcamp}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?set MYSQL_PASSWORD in .env}
+    volumes:
+      - db_data_dev:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-p${MYSQL_PASSWORD}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    restart: unless-stopped
+    ports:
+      - "${DEV_API_PORT:-9186}:9185"
+    volumes:
+      # Source is bind-mounted so saves on the host trigger a rebuild.
+      - ./server:/src
+      # Named volumes keep the module and build caches warm across restarts,
+      # which is the difference between a 1s and a 30s rebuild.
+      - go_mod_cache:/go/pkg/mod
+      - go_build_cache:/root/.cache/go-build
+    environment:
+      PORT: "9185"
+      # No WEB_DIR: in development Vite serves the UI, not the Go server.
+      MYSQL_HOST: db
+      MYSQL_PORT: "3306"
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-b2bandcamp}
+      MYSQL_USER: ${MYSQL_USER:-b2bandcamp}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?set MYSQL_PASSWORD in .env}
+      ALLOW_REGISTRATION: "true"
+      COOKIE_SECURE: "false"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    image: node:22-alpine
+    restart: unless-stopped
+    working_dir: /web
+    ports:
+      - "${WEB_PORT:-5173}:5173"
+    volumes:
+      - ./web:/web
+      # Anonymous volume so the container's node_modules is not clobbered by
+      # (or written back to) the host directory.
+      - /web/node_modules
+    environment:
+      # Vite proxies API calls to the Go container over the compose network.
+      VITE_API_TARGET: http://api:9185
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0 --port 5173"
+    depends_on:
+      - api
+
+volumes:
+  db_data_dev:
+  go_mod_cache:
+  go_build_cache:

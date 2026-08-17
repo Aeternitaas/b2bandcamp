@@ -8,9 +8,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/aeternitaas/b2b_helper/server/internal/bandcamp"
-	"github.com/aeternitaas/b2b_helper/server/internal/config"
-	"github.com/aeternitaas/b2b_helper/server/internal/store"
+	"github.com/aeternitaas/b2bandcamp/server/internal/bandcamp"
+	"github.com/aeternitaas/b2bandcamp/server/internal/config"
+	"github.com/aeternitaas/b2bandcamp/server/internal/store"
 )
 
 type Server struct {
@@ -32,6 +32,11 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/auth/login", s.handleLogin)
 	mux.HandleFunc("POST /api/auth/logout", s.handleLogout)
 	mux.HandleFunc("GET /api/auth/me", s.handleMe)
+	mux.HandleFunc("PATCH /api/account", s.handleUpdateAccount)
+	mux.HandleFunc("POST /api/account/bandcamp", s.handleLinkBandcamp)
+	mux.HandleFunc("DELETE /api/account/bandcamp", s.handleUnlinkBandcamp)
+	mux.HandleFunc("PUT /api/account/avatar", s.handleSetAvatar)
+	mux.HandleFunc("GET /api/account/shares", s.handleListShares)
 
 	// playlists
 	mux.HandleFunc("GET /api/playlists", s.handleListPlaylists)
@@ -44,14 +49,20 @@ func (s *Server) Routes() http.Handler {
 	// tracks
 	mux.HandleFunc("POST /api/playlists/{id}/tracks", s.handleAddTracks)
 	mux.HandleFunc("POST /api/playlists/{id}/tracks/reorder", s.handleReorderTracks)
+	mux.HandleFunc("POST /api/playlists/{id}/tracks/delete", s.handleDeleteTracks)
+	mux.HandleFunc("PATCH /api/playlists/{id}/tracks/{trackId}", s.handleUpdateTrack)
 	mux.HandleFunc("DELETE /api/playlists/{id}/tracks/{trackId}", s.handleDeleteTrack)
 
 	// sharing + collaborators
+	mux.HandleFunc("GET /api/playlists/{id}/share", s.handleGetShareLink)
 	mux.HandleFunc("POST /api/playlists/{id}/share", s.handleCreateShareLink)
 	mux.HandleFunc("DELETE /api/playlists/{id}/share", s.handleRevokeShareLink)
 	mux.HandleFunc("GET /api/playlists/{id}/collaborators", s.handleListCollaborators)
+	mux.HandleFunc("POST /api/playlists/{id}/collaborators", s.handleAddCollaborator)
 	mux.HandleFunc("DELETE /api/playlists/{id}/collaborators/{userId}", s.handleRemoveCollaborator)
 	mux.HandleFunc("GET /api/share/{token}", s.handleResolveShare)
+	mux.HandleFunc("GET /api/users/search", s.handleSearchUsers)
+	mux.HandleFunc("GET /api/users/{username}/profile", s.handleUserProfile)
 
 	// bandcamp
 	mux.HandleFunc("GET /api/bc/search", s.handleBCSearch)
@@ -60,6 +71,12 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/bc/fan", s.handleBCFan)
 	mux.HandleFunc("GET /api/bc/wishlist", s.handleBCWishlist)
 	mux.HandleFunc("GET /api/bc/stream/{trackId}", s.handleBCStream)
+	mux.HandleFunc("GET /api/bc/audio/{trackId}", s.handleBCAudio)
+
+	// cached audio analysis
+	mux.HandleFunc("GET /api/analysis/version", s.handleAnalysisVersion)
+	mux.HandleFunc("GET /api/analysis/{trackId}", s.handleGetAnalysis)
+	mux.HandleFunc("PUT /api/analysis/{trackId}", s.handleSaveAnalysis)
 
 	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})

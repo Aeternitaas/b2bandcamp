@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import { api, setShareToken } from '../api'
 import { PlaylistView } from '../components/PlaylistView'
 import type { Playlist, Track } from '../types'
+import { Icon } from '../components/Icon'
 
 export function PlaylistPage() {
   const { id } = useParams<{ id: string }>()
@@ -48,7 +49,7 @@ export function PlaylistPage() {
     return (
       <div className="col">
         <div className="notice error">{error || 'Playlist not found.'}</div>
-        <Link to="/">← Back to your playlists</Link>
+        <Link to="/">Back to your playlists</Link>
       </div>
     )
   }
@@ -57,7 +58,9 @@ export function PlaylistPage() {
 
   return (
     <div className="col">
-      <Link to="/" className="small">← All playlists</Link>
+      <Link to="/" className="small row" style={{ gap: 4, display: 'inline-flex' }}>
+        <Icon name="arrow-left" size={13} /> All playlists
+      </Link>
       <PlaylistView
         playlist={playlist}
         tracks={tracks}

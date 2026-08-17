@@ -1,0 +1,21 @@
+# syntax=docker/dockerfile:1
+#
+# Development image for the Go server: watches the source tree and rebuilds on
+# save. Only used by docker-compose.dev.yml — production still uses the slim
+# multi-stage build in Dockerfile.
+FROM golang:1.23-alpine
+
+# git is needed to `go install` air; wget backs the healthcheck.
+RUN apk add --no-cache git ca-certificates wget
+
+# air watches the tree and restarts the binary on change.
+RUN go install github.com/air-verse/air@v1.61.1
+
+WORKDIR /src
+
+ENV PORT=9185 \
+    CGO_ENABLED=0
+
+EXPOSE 9185
+
+CMD ["air", "-c", ".air.toml"]

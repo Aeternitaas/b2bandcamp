@@ -1,5 +1,5 @@
 /*
- * Service worker for b2b/helper.
+ * Service worker for b2bandcamp.
  *
  * Deliberately conservative: it makes the app installable and lets the shell
  * open offline, but it never caches API responses or audio. Playlist data is
@@ -8,8 +8,8 @@
  */
 
 const VERSION = 'v1'
-const SHELL_CACHE = `b2b-shell-${VERSION}`
-const ASSET_CACHE = `b2b-assets-${VERSION}`
+const SHELL_CACHE = `b2bandcamp-shell-${VERSION}`
+const ASSET_CACHE = `b2bandcamp-assets-${VERSION}`
 
 const SHELL_URLS = ['/', '/manifest.webmanifest', '/icon.svg']
 

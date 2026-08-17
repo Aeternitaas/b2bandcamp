@@ -1,10 +1,12 @@
 package api
 
 import (
+	"encoding/json"
 	"net/http"
+	"regexp"
 	"strings"
 
-	"github.com/aeternitaas/b2b_helper/server/internal/store"
+	"github.com/aeternitaas/b2bandcamp/server/internal/store"
 )
 
 const (
@@ -84,12 +86,10 @@ func (s *Server) handleUpdatePlaylist(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		Title           *string `json:"title"`
-		Description     *string `json:"description"`
-		CoverURL        *string `json:"cover_url"`
-		Visibility      *string `json:"visibility"`
-		BaseFanUsername *string `json:"base_fan_username"`
-		BaseFanID       *int64  `json:"base_fan_id"`
+		Title       *string `json:"title"`
+		Description *string `json:"description"`
+		CoverURL    *string `json:"cover_url"`
+		Visibility  *string `json:"visibility"`
 	}
 	if !decodeJSON(w, r, &req) {
 		return
@@ -128,22 +128,6 @@ func (s *Server) handleUpdatePlaylist(w http.ResponseWriter, r *http.Request) {
 		}
 		up.Visibility = &v
 	}
-	if req.BaseFanUsername != nil {
-		name := trimTo(*req.BaseFanUsername, 100)
-		if name == "" {
-			up.ClearBaseFan = true
-		} else {
-			// Resolve through Bandcamp so we store a real fan id, not user input.
-			fan, err := s.bc.Fan(r.Context(), name)
-			if err != nil {
-				writeErr(w, http.StatusNotFound, "no Bandcamp user found with that name")
-				return
-			}
-			up.BaseFanID = &fan.FanID
-			up.BaseFanUsername = &fan.Username
-		}
-	}
-
 	if err := s.st.UpdatePlaylist(r.Context(), p.ID, up); err != nil {
 		fail(w, err)
 		return
@@ -317,6 +301,109 @@ func (s *Server) handleDeleteTrack(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
+// handleUpdateTrack currently carries only the tempo, which the client fills in
+// after analysing the audio or the user corrects by hand.
+func (s *Server) handleUpdateTrack(w http.ResponseWriter, r *http.Request) {
+	p, _, ok := s.requireEdit(w, r)
+	if !ok {
+		return
+	}
+	trackRowID, valid := pathInt(r, "trackId")
+	if !valid {
+		writeErr(w, http.StatusBadRequest, "invalid track id")
+		return
+	}
+
+	// Decoded field by field so "absent" and "null" stay distinguishable: null
+	// clears that override, absent leaves it alone. A struct of pointers cannot
+	// express the difference, so updating the tempo would wipe the key.
+	var raw map[string]json.RawMessage
+	if !decodeJSON(w, r, &raw) {
+		return
+	}
+	for field := range raw {
+		if field != "bpm" && field != "key_override" {
+			writeErr(w, http.StatusBadRequest, "unknown field "+field)
+			return
+		}
+	}
+
+	if value, present := raw["bpm"]; present {
+		var bpm *float64
+		if err := json.Unmarshal(value, &bpm); err != nil {
+			writeErr(w, http.StatusBadRequest, "bpm must be a number or null")
+			return
+		}
+		// Reject nonsense outright; a bad value is worse than none, because it
+		// silently misleads anyone beat-matching against it.
+		if bpm != nil && (*bpm <= 0 || *bpm > 400) {
+			writeErr(w, http.StatusBadRequest, "bpm must be between 1 and 400")
+			return
+		}
+		if err := s.st.SetTrackBPM(r.Context(), p.ID, trackRowID, bpm); err != nil {
+			fail(w, err)
+			return
+		}
+	}
+
+	if value, present := raw["key_override"]; present {
+		var key *string
+		if err := json.Unmarshal(value, &key); err != nil {
+			writeErr(w, http.StatusBadRequest, "key_override must be a string or null")
+			return
+		}
+		code := ""
+		if key != nil && *key != "" {
+			if code = normalizeCamelot(*key); code == "" {
+				writeErr(w, http.StatusBadRequest, "key must be a Camelot code such as 8A or 12B")
+				return
+			}
+		}
+		if err := s.st.SetTrackKey(r.Context(), p.ID, trackRowID, code); err != nil {
+			fail(w, err)
+			return
+		}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+// handleDeleteTracks removes a selected group of tracks in one request.
+func (s *Server) handleDeleteTracks(w http.ResponseWriter, r *http.Request) {
+	p, _, ok := s.requireEdit(w, r)
+	if !ok {
+		return
+	}
+
+	var req struct {
+		IDs []int64 `json:"ids"`
+	}
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	if len(req.IDs) == 0 {
+		writeErr(w, http.StatusBadRequest, "no tracks selected")
+		return
+	}
+	if len(req.IDs) > maxPlaylistTracks {
+		writeErr(w, http.StatusBadRequest, "too many tracks")
+		return
+	}
+
+	removed, err := s.st.DeleteTracks(r.Context(), p.ID, req.IDs)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+
+	tracks, err := s.st.Tracks(r.Context(), p.ID)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"removed": removed, "tracks": tracks})
+}
+
 func (s *Server) handleReorderTracks(w http.ResponseWriter, r *http.Request) {
 	p, _, ok := s.requireEdit(w, r)
 	if !ok {
@@ -345,6 +432,19 @@ func (s *Server) handleReorderTracks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"tracks": tracks})
+}
+
+var camelotRe = regexp.MustCompile(`^(1[0-2]|[1-9])[AB]$`)
+
+// normalizeCamelot upper-cases and validates a Camelot wheel code, returning
+// "" when it is not one. The wheel runs 1-12 with an A (minor) or B (major)
+// side, so anything else would sort and match nonsensically.
+func normalizeCamelot(input string) string {
+	code := strings.ToUpper(strings.TrimSpace(input))
+	if code == "" || !camelotRe.MatchString(code) {
+		return ""
+	}
+	return code
 }
 
 // isSafeImageURL keeps cover art pointed at https so a playlist cannot be used

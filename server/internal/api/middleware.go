@@ -8,8 +8,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/aeternitaas/b2b_helper/server/internal/auth"
-	"github.com/aeternitaas/b2b_helper/server/internal/store"
+	"github.com/aeternitaas/b2bandcamp/server/internal/auth"
+	"github.com/aeternitaas/b2bandcamp/server/internal/store"
 )
 
 type ctxKey int

@@ -55,7 +55,7 @@ export function SharePage() {
     return (
       <div className="col">
         <div className="notice error">{error || 'This share link is no longer valid.'}</div>
-        <Link to="/">← Go to your playlists</Link>
+        <Link to="/">Go to your playlists</Link>
       </div>
     )
   }

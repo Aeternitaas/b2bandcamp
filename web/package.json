@@ -1,5 +1,5 @@
 {
-  "name": "b2b-helper-web",
+  "name": "b2bandcamp-web",
   "private": true,
   "version": "1.0.0",
   "type": "module",
@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:audio": "esbuild src/audio/analysis.ts --bundle --format=esm --outfile=src/audio/analysis.built.mjs --log-level=error && node src/audio/analysis.test.mjs && rm -f src/audio/analysis.built.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",

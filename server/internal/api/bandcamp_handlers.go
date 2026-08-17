@@ -1,11 +1,14 @@
 package api
 
 import (
+	"errors"
+	"io"
+	"log"
 	"net/http"
 	"strconv"
 	"time"
 
-	"github.com/aeternitaas/b2b_helper/server/internal/bandcamp"
+	"github.com/aeternitaas/b2bandcamp/server/internal/bandcamp"
 )
 
 var bcLimiter = newLimiter(240, time.Minute)
@@ -146,9 +149,9 @@ func (s *Server) handleBCStream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	url, err := s.bc.StreamURL(r.Context(), trackID, bandID)
+	streamURL, err := s.bc.StreamURL(r.Context(), trackID, bandID)
 	if err != nil {
-		if err == bandcamp.ErrNotFound {
+		if errors.Is(err, bandcamp.ErrNotFound) {
 			writeErr(w, http.StatusNotFound, "this track is no longer streamable")
 			return
 		}
@@ -159,5 +162,75 @@ func (s *Server) handleBCStream(w http.ResponseWriter, r *http.Request) {
 	// Short cache so a seek or replay does not re-resolve, but well inside the
 	// lifetime of the signature on the URL.
 	w.Header().Set("Cache-Control", "private, max-age=60")
-	http.Redirect(w, r, url, http.StatusFound)
+	http.Redirect(w, r, streamURL, http.StatusFound)
 }
+
+// handleBCAudio relays the audio bytes instead of redirecting to them.
+//
+// Web Audio cannot read samples from a cross-origin response that carries no
+// CORS headers, and Bandcamp's CDN sends none — an <audio> element plays such a
+// stream fine, but an AnalyserNode attached to it only ever sees silence. The
+// waveform, BPM and key features therefore need the audio to arrive same-origin,
+// which is what this endpoint provides. Normal playback still uses the redirect
+// above, so this cost is only paid when analysis is actually requested.
+func (s *Server) handleBCAudio(w http.ResponseWriter, r *http.Request) {
+	if !s.throttle(w, r) {
+		return
+	}
+
+	trackID, ok := pathInt(r, "trackId")
+	if !ok {
+		writeErr(w, http.StatusBadRequest, "invalid track id")
+		return
+	}
+	bandID, err := strconv.ParseInt(r.URL.Query().Get("band_id"), 10, 64)
+	if err != nil || bandID <= 0 {
+		writeErr(w, http.StatusBadRequest, "band_id is required")
+		return
+	}
+
+	upstream, err := s.bc.StreamURL(r.Context(), trackID, bandID)
+	if err != nil {
+		if errors.Is(err, bandcamp.ErrNotFound) {
+			writeErr(w, http.StatusNotFound, "this track is no longer streamable")
+			return
+		}
+		fail(w, err)
+		return
+	}
+
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, upstream, nil)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	// Forward Range so seeking still works through the proxy.
+	if rng := r.Header.Get("Range"); rng != "" {
+		req.Header.Set("Range", rng)
+	}
+
+	resp, err := audioClient.Do(req)
+	if err != nil {
+		log.Printf("audio proxy: %v", err)
+		writeErr(w, http.StatusBadGateway, "could not reach Bandcamp")
+		return
+	}
+	defer resp.Body.Close()
+
+	for _, h := range []string{"Content-Type", "Content-Length", "Content-Range", "Accept-Ranges"} {
+		if v := resp.Header.Get(h); v != "" {
+			w.Header().Set(h, v)
+		}
+	}
+	w.Header().Set("Cache-Control", "private, max-age=300")
+	w.WriteHeader(resp.StatusCode)
+
+	if _, err := io.Copy(w, resp.Body); err != nil {
+		// Normal when the listener seeks or skips mid-download.
+		log.Printf("audio proxy: copy interrupted: %v", err)
+	}
+}
+
+// audioClient has no overall timeout: a full track can take a while to relay,
+// and the request context already bounds it to the client's connection.
+var audioClient = &http.Client{}

@@ -33,7 +33,7 @@ export function AuthPage() {
     <div className="auth-wrap">
       <div className="col" style={{ gap: 18 }}>
         <div className="center">
-          <div className="brand" style={{ fontSize: 24 }}>b2b<span>/</span>helper</div>
+          <div className="brand" style={{ fontSize: 24 }}>b2<span>bandcamp</span></div>
           <div className="dim small">Bandcamp playlists you actually own.</div>
         </div>
 

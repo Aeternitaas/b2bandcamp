@@ -1,4 +1,4 @@
-module github.com/aeternitaas/b2b_helper/server
+module github.com/aeternitaas/b2bandcamp/server
 
 go 1.23
 

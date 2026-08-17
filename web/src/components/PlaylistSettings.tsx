@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api'
+import { copyText, playlistCover } from '../utils'
 import { Modal } from './Modal'
+import { InviteCollaborators } from './InviteCollaborators'
 import type { Collaborator, Playlist, Visibility } from '../types'
+import { Icon } from './Icon'
 
 interface Props {
   playlist: Playlist
@@ -12,9 +15,9 @@ interface Props {
 }
 
 const VISIBILITY_HELP: Record<Visibility, string> = {
-  private: 'Only you can open and edit this playlist. Any share link stops working.',
-  shared: 'Anyone with the link can listen. Signed-in visitors who open it become collaborators and can edit.',
-  public: 'Anyone with the link can edit, including people without an account.',
+  private: 'Only you and people you invite below. Any share link stops working.',
+  shared: 'Invited collaborators can edit. Anyone with the link can listen, and signed-in visitors who open it are added as collaborators.',
+  public: 'Listed on your public profile and readable by anyone. Anyone holding the link can also edit, including people without an account.',
 }
 
 export function PlaylistSettings({ playlist, isOwner, onClose, onSaved, onDeleted }: Props) {
@@ -36,7 +39,15 @@ export function PlaylistSettings({ playlist, isOwner, onClose, onSaved, onDelete
     api.collaborators(playlist.id)
       .then((r) => setCollaborators(r.collaborators))
       .catch(() => undefined)
-  }, [playlist.id])
+
+    // The link is stored, so show the existing one rather than making the
+    // owner rotate it just to see it again.
+    if (isOwner) {
+      api.getShareLink(playlist.id)
+        .then((r) => { if (r.token) setShareUrl(`${window.location.origin}${r.path}`) })
+        .catch(() => undefined)
+    }
+  }, [playlist.id, isOwner])
 
   const save = async () => {
     setSaving(true)
@@ -93,19 +104,10 @@ export function PlaylistSettings({ playlist, isOwner, onClose, onSaved, onDelete
 
   const copyLink = async () => {
     try {
-      await navigator.clipboard.writeText(shareUrl)
+      if (!(await copyText(shareUrl))) throw new Error('copy unavailable')
       setStatus('Link copied.')
     } catch {
-      setStatus('Copy failed — select the link and copy it manually.')
-    }
-  }
-
-  const removeCollaborator = async (userId: number) => {
-    try {
-      await api.removeCollaborator(playlist.id, userId)
-      setCollaborators((prev) => prev.filter((c) => c.user_id !== userId))
-    } catch (e) {
-      setError((e as Error).message)
+      setStatus('Copy failed — select the link above and copy it manually.')
     }
   }
 
@@ -134,9 +136,9 @@ export function PlaylistSettings({ playlist, isOwner, onClose, onSaved, onDelete
         <div className="field">
           <label htmlFor="pl-cover">Cover art URL</label>
           <div className="row">
-            {coverUrl
-              ? <img className="cover" src={coverUrl} alt="" />
-              : <div className="cover">♪</div>}
+            {(coverUrl || playlistCover(playlist))
+              ? <img className="cover" src={coverUrl || playlistCover(playlist)} alt="" />
+              : <div className="cover"><Icon name="music" size={20} /></div>}
             <input
               id="pl-cover"
               value={coverUrl}
@@ -153,9 +155,9 @@ export function PlaylistSettings({ playlist, isOwner, onClose, onSaved, onDelete
           <div className="field">
             <label htmlFor="pl-vis">Who can edit</label>
             <select id="pl-vis" value={visibility} onChange={(e) => setVisibility(e.target.value as Visibility)}>
-              <option value="private">Private — only me</option>
-              <option value="shared">Shared — invited collaborators</option>
-              <option value="public">Public — anyone with the link</option>
+              <option value="private">Private — only me and people I invite</option>
+              <option value="shared">Shared — invited collaborators, link to listen</option>
+              <option value="public">Public — listed on my profile</option>
             </select>
             <span className="faint small">{VISIBILITY_HELP[visibility]}</span>
           </div>
@@ -173,6 +175,14 @@ export function PlaylistSettings({ playlist, isOwner, onClose, onSaved, onDelete
         {isOwner && (
           <>
             <hr style={{ border: 0, borderTop: '1px solid var(--border)', margin: '4px 0' }} />
+            <h3>Invited collaborators</h3>
+            <InviteCollaborators
+              playlistId={playlist.id}
+              collaborators={collaborators}
+              onChange={setCollaborators}
+            />
+
+            <hr style={{ border: 0, borderTop: '1px solid var(--border)', margin: '4px 0' }} />
             <h3>Collaboration link</h3>
 
             {shareUrl ? (
@@ -183,8 +193,8 @@ export function PlaylistSettings({ playlist, isOwner, onClose, onSaved, onDelete
                   <button className="danger" onClick={revokeLink} disabled={sharing}>Revoke</button>
                 </div>
                 <span className="faint small">
-                  This link is shown once. The server only keeps a hash of it, so it cannot be recovered later —
-                  generate a new one if you lose it (which invalidates the old link).
+                  This link stays available here, so you never need to rotate it just to look it up.
+                  Generating a new one replaces it and breaks the old link.
                 </span>
               </div>
             ) : (
@@ -204,24 +214,6 @@ export function PlaylistSettings({ playlist, isOwner, onClose, onSaved, onDelete
                   </span>
                 )}
               </div>
-            )}
-
-            {collaborators.length > 0 && (
-              <>
-                <h3>Collaborators</h3>
-                <div className="col" style={{ gap: 6 }}>
-                  {collaborators.map((c) => (
-                    <div className="row" key={c.user_id}>
-                      <span className="truncate">{c.username}</span>
-                      <div className="spacer" />
-                      <button className="ghost icon danger" onClick={() => removeCollaborator(c.user_id)}
-                        aria-label={`Remove ${c.username}`}>
-                        Remove
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </>
             )}
 
             <hr style={{ border: 0, borderTop: '1px solid var(--border)', margin: '4px 0' }} />

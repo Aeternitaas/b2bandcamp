@@ -9,6 +9,8 @@ interface AuthValue {
   login: (login: string, password: string) => Promise<void>
   register: (username: string, email: string, password: string) => Promise<void>
   logout: () => Promise<void>
+  /** Re-reads the signed-in user, e.g. after changing the email. */
+  refresh: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthValue | null>(null)
@@ -41,9 +43,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null)
   }, [])
 
+  const refresh = useCallback(async () => {
+    try {
+      setUser((await api.me()).user)
+    } catch {
+      setUser(null)
+    }
+  }, [])
+
   const value = useMemo(
-    () => ({ user, loading, login, register, logout }),
-    [user, loading, login, register, logout],
+    () => ({ user, loading, login, register, logout, refresh }),
+    [user, loading, login, register, logout, refresh],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

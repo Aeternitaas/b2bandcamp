@@ -179,11 +179,12 @@ button.icon { min-height: 36px; padding: 6px 8px; }
   width: 100%;
   max-width: 1100px;
   margin: 0 auto;
-  padding: 16px 12px calc(var(--player-h) + var(--safe-b) + 24px);
+  /* Falls back to the collapsed height before the player measures itself. */
+  padding: 16px 12px calc(var(--player-actual-h, var(--player-h)) + var(--safe-b) + 24px);
 }
 
 @media (min-width: 720px) {
-  .main { padding: 24px 20px calc(var(--player-h) + 32px); }
+  .main { padding: 24px 20px calc(var(--player-actual-h, var(--player-h)) + var(--safe-b) + 32px); }
 }
 
 .card {
@@ -515,3 +516,869 @@ code.share-link {
   font-size: 11.5px;
   word-break: break-all;
 }
+
+/* ---------- volume control ---------- */
+
+.volume { position: relative; display: flex; align-items: center; }
+
+/* On phones the slider is revealed above the bar; from tablet up there is room
+   to keep it inline. */
+.volume-slider {
+  display: none;
+  position: absolute;
+  bottom: calc(100% + 8px);
+  right: 0;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+.volume-slider.open { display: flex; }
+.volume-slider input[type='range'] { width: 120px; }
+
+@media (min-width: 900px) {
+  .volume-slider {
+    display: flex;
+    position: static;
+    padding: 0;
+    background: none;
+    border: 0;
+    box-shadow: none;
+  }
+  .volume-slider input[type='range'] { width: 84px; }
+  .volume-slider button { display: none; }
+}
+
+/* ---------- range inputs ---------- */
+
+input[type='range'] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 26px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+input[type='range']:focus { box-shadow: none; }
+
+input[type='range']::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border);
+}
+input[type='range']::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border);
+}
+input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  margin-top: -6px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 0;
+  cursor: pointer;
+}
+input[type='range']::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 0;
+  cursor: pointer;
+}
+
+input[type='checkbox'] { width: auto; height: auto; }
+
+/* ---------- waveform + analysis ---------- */
+
+.waveform {
+  display: block;
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  touch-action: none;
+}
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.stat {
+  padding: 10px 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.stat-label {
+  font-size: 11px;
+  color: var(--dim);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.stat-value {
+  font-size: 20px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.stat-unit { font-size: 12px; color: var(--dim); font-weight: 400; }
+
+/* ---------- avatars ---------- */
+
+.avatar {
+  flex: 0 0 auto;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 50%;
+  object-fit: cover;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  user-select: none;
+  background: var(--surface-2);
+}
+
+/* A button sized to sit flush with a .badge, used for the delete control on
+   playlist rows. */
+.badge-button {
+  min-height: 0;
+  padding: 2px 7px;
+  font-size: 11px;
+  line-height: 1.5;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--danger) 45%, transparent);
+}
+
+/* ---------- contributor filter ---------- */
+
+.contributor-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 4px;
+}
+
+@media (min-width: 560px) {
+  .contributor-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+.contributor {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  cursor: pointer;
+  user-select: none;
+  min-height: 44px; /* comfortable touch target */
+}
+.contributor:hover { border-color: var(--accent-dim); }
+.contributor input[type='checkbox'] { flex: 0 0 auto; margin: 0; }
+
+/* ---------- contributor avatar menu (on track rows) ---------- */
+
+.contributor-menu { position: relative; display: flex; align-items: center; }
+
+.contributor-trigger {
+  min-height: 0;
+  padding: 0;
+  background: none;
+  border: 0;
+  border-radius: 50%;
+  cursor: pointer;
+}
+.contributor-trigger:hover:not(:disabled) { background: none; }
+.contributor-trigger:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.contributor-popover {
+  display: none;
+  flex-direction: column;
+  gap: 4px;
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 6px);
+  z-index: 30;
+  min-width: 190px;
+  padding: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+}
+
+/* Tap/click opens it everywhere; hover is an extra affordance for mice only,
+   so touch users are never left without a way in. */
+.contributor-menu[data-open] .contributor-popover { display: flex; }
+
+@media (hover: hover) and (pointer: fine) {
+  .contributor-menu:hover .contributor-popover,
+  .contributor-menu:focus-within .contributor-popover { display: flex; }
+}
+
+.contributor-popover button {
+  justify-content: flex-start;
+  min-height: 36px;
+  font-size: 12.5px;
+}
+
+/* ---------- add-choice popover (wishlist albums) ---------- */
+
+.add-choice { position: relative; display: flex; align-items: center; }
+
+.add-choice-popover {
+  display: none;
+  flex-direction: column;
+  gap: 4px;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 30;
+  min-width: 210px;
+  padding: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+}
+
+/* Hover for mice, focus-within so keyboards and taps reach it too. */
+.add-choice:hover .add-choice-popover,
+.add-choice:focus-within .add-choice-popover { display: flex; }
+
+.add-choice-popover button {
+  justify-content: flex-start;
+  min-height: 38px;
+  font-size: 12.5px;
+}
+
+/* Keeps the popover from closing as the pointer travels to it. */
+.add-choice::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 100%;
+  width: 100%;
+  height: 8px;
+}
+
+.icon-svg { flex: 0 0 auto; display: block; }
+
+/* ---------- track grid ---------- */
+
+/* Header and rows are separate grids that share one template, which is what
+   keeps their columns lined up while each row stays independently draggable. */
+.track-head,
+.track-row {
+  display: grid;
+  align-items: center;
+  gap: 10px;
+}
+
+.track-head {
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--border);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--faint);
+  user-select: none;
+}
+
+.track-head-cell { position: relative; display: flex; align-items: center; min-width: 0; }
+.track-head-cell.dragging { opacity: 0.55; }
+
+.track-head-label {
+  min-height: 0;
+  padding: 2px 0;
+  background: none;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  cursor: grab;
+  text-align: left;
+}
+.track-head-label:hover:not(:disabled) { background: none; color: var(--dim); }
+.track-head-label:active { cursor: grabbing; }
+
+/* Invisible until approached — the grid lines should not compete with the
+   music, but the affordance has to be findable. */
+.col-resize {
+  position: absolute;
+  right: -7px;
+  top: -4px;
+  bottom: -4px;
+  width: 12px;
+  cursor: col-resize;
+  touch-action: none;
+}
+.col-resize::after {
+  content: '';
+  position: absolute;
+  left: 5px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: transparent;
+  transition: background 0.12s ease;
+}
+.track-head:hover .col-resize::after { background: var(--border); }
+.col-resize:hover::after { background: var(--accent); }
+
+.track-cell { display: flex; align-items: center; min-width: 0; }
+.track-action { display: inline-flex; align-items: center; justify-content: center; padding: 6px; }
+
+/* ---------- editable bpm ---------- */
+
+.bpm-cell {
+  min-height: 30px;
+  padding: 2px 6px;
+  width: 100%;
+  justify-content: flex-start;
+  background: none;
+  border: 1px solid transparent;
+  color: var(--dim);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.bpm-cell:hover:not(:disabled) { background: var(--surface-2); border-color: var(--border); }
+.bpm-cell.empty { color: var(--faint); }
+.bpm-cell:disabled { opacity: 1; cursor: default; }
+
+.bpm-input {
+  width: 100%;
+  min-height: 30px;
+  padding: 2px 6px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.icon-svg.flip { transform: rotate(180deg); }
+
+/* ---------- selection + bulk actions ---------- */
+
+.track-select { display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.track-select input[type='checkbox'] { margin: 0; width: auto; }
+
+.track-row.selected { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+
+.bulk-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 8px 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--accent-dim);
+  border-radius: var(--radius);
+}
+
+.append-row {
+  width: 100%;
+  justify-content: flex-start;
+  gap: 8px;
+  min-height: 46px;
+  background: transparent;
+  border: 1px dashed var(--border);
+  color: var(--dim);
+}
+.append-row:hover:not(:disabled) {
+  background: var(--surface);
+  border-color: var(--accent-dim);
+  color: var(--text);
+}
+
+/* ---------- dropdown ---------- */
+
+.dropdown { position: relative; display: inline-flex; }
+
+.dropdown-scrim { position: fixed; inset: 0; z-index: 29; }
+
+.dropdown-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 250px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+}
+
+/* ---------- inline analysis panel on the player ---------- */
+
+.player-analysis {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-bottom: 1px solid var(--border);
+  max-height: 46vh;
+  overflow-y: auto;
+}
+
+.analysis-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.analysis-row .stat { flex: 1 1 120px; }
+
+/* ---------- contributor strip under the playlist header ---------- */
+
+.contributor-strip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+/* The strip sits high on the page, so its menus open downward rather than
+   above, where they would be clipped by the header. */
+.contributor-strip .contributor-popover {
+  bottom: auto;
+  top: calc(100% + 6px);
+}
+
+/* The tempo and key readouts are small numbers — on a wide screen they should
+   sit compactly beside the slider rather than stretching across the bar. */
+.analysis-row .stat {
+  flex: 0 0 auto;
+  min-width: 92px;
+  padding: 6px 10px;
+}
+.analysis-row .stat-value { font-size: 15px; }
+.analysis-row .stat-label { font-size: 10px; }
+
+@media (min-width: 720px) {
+  .analysis-row .stat { min-width: 104px; }
+}
+
+/* The playback-tempo tile keeps the leftover width. */
+.analysis-row .stat.grow { flex: 1 1 200px; }
+
+/* A centre detent on the tempo slider, so unmodified playback is findable by
+   feel rather than only by reading the number. */
+.tempo-slider {
+  background:
+    linear-gradient(var(--faint), var(--faint)) no-repeat center / 1px 12px;
+}
+
+/* The re-analyse control only exists while the tempo is being edited, so the
+   list stays uncluttered when simply reading BPM values. */
+.bpm-edit { display: flex; align-items: center; gap: 2px; min-width: 0; }
+.bpm-edit .bpm-input { flex: 1 1 auto; min-width: 0; }
+.bpm-rerun { flex: 0 0 auto; padding: 4px; min-height: 26px; }
+
+/* ---------- wishlist artwork previews ---------- */
+
+.wish-art,
+.popover-art {
+  position: relative;
+  flex: 0 0 auto;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-2);
+  display: grid;
+  place-items: center;
+  color: var(--faint);
+  cursor: pointer;
+  min-height: 0;
+}
+.wish-art { width: 44px; height: 44px; }
+.popover-art { width: 28px; height: 28px; }
+
+.wish-art img,
+.popover-art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+/* The play affordance stays out of the way until the artwork is approached. */
+.popover-art-overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.45);
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.wish-art:hover .popover-art-overlay,
+.wish-art:focus-visible .popover-art-overlay,
+.popover-art:hover .popover-art-overlay,
+.popover-art:focus-visible .popover-art-overlay,
+.popover-track.playing .popover-art-overlay { opacity: 1; }
+
+/* ---------- inline album track list ---------- */
+
+.add-choice-popover.wide { min-width: 330px; }
+
+.popover-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 2px 0;
+}
+
+/* Capped so a long album scrolls inside the menu rather than running off
+   the screen. */
+.popover-tracks {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.popover-track {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px;
+  border-radius: 6px;
+}
+.popover-track:hover { background: var(--surface-2); }
+.popover-track.playing { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.popover-track .track-index { flex: 0 0 20px; }
+
+/* ---------- key column ---------- */
+
+/* Sized and weighted like the time and tempo cells so no one column shouts. */
+.key-cell {
+  display: flex;
+  /* Centre, not baseline: every neighbouring cell is a button centring its
+     content, and baseline alignment left this one sitting low. */
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.key-cell.empty { color: var(--faint); }
+.key-camelot { color: var(--dim); }
+.key-name { color: var(--faint); font-size: 11px; }
+
+/* A manually set tempo is marked so it is obvious the number is not detected. */
+.bpm-cell.overridden { color: var(--accent); font-weight: 600; }
+.bpm-cell.overridden::after { content: '*'; margin-left: 1px; }
+
+.track-head-label.sortable { cursor: pointer; display: inline-flex; align-items: center; gap: 3px; }
+.track-head-label.sortable:hover { color: var(--accent); }
+.icon-svg.flip-v { transform: rotate(180deg); }
+
+/* ---------- bulk bar as an overlay ---------- */
+
+/* Floated rather than placed in the flow: appearing in-flow pushed the list
+   down and moved rows out from under the pointer mid-selection. */
+.bulk-bar {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(var(--player-actual-h, var(--player-h)) + var(--safe-b) + 12px);
+  z-index: 44;
+  width: min(680px, calc(100vw - 24px));
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  top: auto;
+}
+
+/* ---------- active share links (Settings) ---------- */
+
+/* Fixed height with its own scrollbar so the list cannot push the rest of the
+   settings page down as more playlists get shared. */
+.share-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 300px;
+  overflow-y: auto;
+  padding-right: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px;
+  background: var(--bg);
+}
+
+.share-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.share-title { font-size: 13px; color: var(--text); }
+.share-title:hover { color: var(--accent); }
+
+.share-token {
+  display: block;
+  padding: 5px 7px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 11.5px;
+  color: var(--dim);
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+/* Give the scroll container a visible, themed scrollbar rather than the
+   browser default, which is nearly invisible on the dark surface. */
+.share-list::-webkit-scrollbar { width: 10px; }
+.share-list::-webkit-scrollbar-track { background: transparent; }
+.share-list::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 999px;
+  border: 3px solid var(--bg);
+}
+.share-list::-webkit-scrollbar-thumb:hover { background: var(--faint); }
+.share-list { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+
+/* The key cell is a flat control like the tempo one: no chrome until it is
+   approached, so a column of keys reads as text rather than as a row of boxes. */
+.key-cell {
+  min-height: 30px;
+  padding: 2px 6px;
+  width: 100%;
+  justify-content: flex-start;
+  background: none;
+  border: 1px solid transparent;
+}
+.key-cell:hover:not(:disabled) { background: var(--surface-2); border-color: var(--border); }
+.key-cell:disabled { opacity: 1; cursor: default; }
+.key-cell.overridden .key-camelot { color: var(--accent); font-weight: 600; }
+.key-cell.overridden::after { content: '*'; margin-left: 1px; color: var(--accent); }
+
+.key-input {
+  width: 100%;
+  min-height: 30px;
+  padding: 2px 6px;
+  font-size: 12px;
+  text-transform: uppercase;
+}
+.key-input.invalid {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--danger) 25%, transparent);
+}
+
+/* ==========================================================================
+   Compact (phone) track rows
+   ========================================================================== */
+
+.track-row.compact {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 6px;
+  /* Comfortably above the 44px minimum touch target. */
+  min-height: 60px;
+  cursor: pointer;
+  /* Stop the browser turning a long press into a text selection or callout. */
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  /* Vertical panning stays with the page; the row only handles taps and holds. */
+  touch-action: pan-y;
+}
+.track-row.compact:active { background: var(--surface-2); }
+
+.track-art-wrap { position: relative; flex: 0 0 auto; }
+.track-art-wrap .cover { width: 44px; height: 44px; }
+
+.now-playing-badge {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: color-mix(in srgb, var(--accent) 55%, rgba(0, 0, 0, 0.5));
+  border-radius: 6px;
+}
+
+.select-dot {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border: 2px solid var(--border);
+  border-radius: 50%;
+  color: #04222b;
+}
+.select-dot.on { background: var(--accent); border-color: var(--accent); }
+
+.track-meta-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 2px;
+}
+.meta-chip { display: inline-flex; align-items: center; font-size: 11.5px; }
+/* Inside the meta line the cells are inline values, not full-width controls. */
+.meta-chip .bpm-cell,
+.meta-chip .key-cell { width: auto; min-height: 24px; padding: 1px 4px; }
+.meta-chip .bpm-input,
+.meta-chip .key-input { width: 58px; min-height: 26px; }
+
+.track-row.compact .track-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 auto;
+}
+.track-row.compact .drag-handle { width: 32px; height: 40px; }
+
+/* ==========================================================================
+   Phone refinements
+   ========================================================================== */
+
+@media (max-width: 640px) {
+  /* Toolbar buttons wrap into an even grid instead of a ragged row. */
+  .playlist-actions { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .playlist-actions .spacer { display: none; }
+  .playlist-actions > * { width: 100%; }
+
+  .modal { max-height: 92vh; }
+
+  /* Full-width sheet for the wishlist rather than a narrow drawer. */
+  .sidebar { width: 100vw; }
+
+  /* Menus that hang off a row would overflow a narrow viewport. */
+  .add-choice-popover,
+  .add-choice-popover.wide,
+  .contributor-popover {
+    position: fixed;
+    left: 8px;
+    right: 8px;
+    width: auto;
+    min-width: 0;
+    max-width: none;
+  }
+  .dropdown-menu { min-width: 0; width: calc(100vw - 24px); }
+
+  .bulk-bar { width: calc(100vw - 16px); gap: 6px; }
+  .bulk-bar button { flex: 1 1 auto; }
+
+  .stat-grid { grid-template-columns: 1fr; }
+  .analysis-row .stat { flex: 1 1 100%; }
+  .player-analysis { max-height: 52vh; }
+}
+
+/* Touch devices get no hover, so anything hover-only needs to be tappable. */
+@media (hover: none) {
+  .popover-art-overlay { opacity: 1; background: rgba(0, 0, 0, 0.3); }
+  .track-head:hover .col-resize::after { background: var(--border); }
+}
+
+/* Respect reduced-motion for the sheet animations too. */
+@media (prefers-reduced-motion: reduce) {
+  .sidebar, .modal, .modal-backdrop { animation: none !important; }
+}
+
+/* ==========================================================================
+   Player stays visible
+   ========================================================================== */
+
+/* The wishlist sheet and modal backdrop used to sit above the player and cover
+   it on a phone. The player now outranks them, and they inset to leave room. */
+.player { z-index: 66; }
+
+.sidebar { bottom: calc(var(--player-actual-h, var(--player-h)) + var(--safe-b)); }
+.sidebar-backdrop { bottom: calc(var(--player-actual-h, var(--player-h)) + var(--safe-b)); }
+
+.modal-backdrop { padding-bottom: calc(var(--player-actual-h, var(--player-h)) + var(--safe-b)); }
+
+/* ==========================================================================
+   Swipe-to-reveal row actions
+   ========================================================================== */
+
+.track-swipe { position: relative; overflow: hidden; }
+
+.track-swipe-actions {
+  position: absolute;
+  inset: 0 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding-right: 6px;
+  background: var(--surface-2);
+}
+.track-swipe-actions .track-action { min-height: 40px; padding: 8px; }
+
+/* Transform is animated, not left/top, so the slide stays on the compositor. */
+.track-row.compact {
+  position: relative;
+  background: var(--bg);
+  transition: transform 0.16s ease;
+  will-change: transform;
+}
+.track-row.compact.playing { background: color-mix(in srgb, var(--accent) 12%, var(--bg)); }
+.track-row.compact.selected { background: color-mix(in srgb, var(--accent) 18%, var(--bg)); }
+
+/* ==========================================================================
+   Artwork sizing
+   ========================================================================== */
+
+/* The grid reserves 36px for artwork; without this the image kept its default
+   52px and overlapped the title column. */
+.track-row:not(.compact) .track-art-wrap .cover { width: 36px; height: 36px; }
+.track-art-wrap { position: relative; flex: 0 0 auto; cursor: pointer; display: block; }
+.track-row:not(.compact) .track-art-wrap { width: 36px; height: 36px; }
+
+/* ==========================================================================
+   Compact spacing
+   ========================================================================== */
+
+@media (max-width: 640px) {
+  .track-row.compact { gap: 8px; padding: 6px; min-height: 58px; }
+  .track-row.compact .track-meta { gap: 0; }
+  .track-meta-line { gap: 6px; margin-top: 1px; }
+  .meta-chip { font-size: 11px; }
+  .meta-chip .bpm-cell,
+  .meta-chip .key-cell { padding: 0 3px; min-height: 22px; }
+
+  /* Tighten the player: the seek bar sat well clear of the transport row. */
+  .player-inner { gap: 8px; height: 58px; padding: 0 8px; }
+  .player-art { width: 40px; height: 40px; }
+  :root { --player-h: 58px; }
+}
+
+/* Contributor and drag handle share the compact row's right-hand tail. */
+.track-row.compact .track-actions { gap: 6px; }
+
+/* Second line: artist takes the slack and truncates, the values keep their
+   width. Nowrap so a long artist name cannot push the chips onto a third row. */
+.track-meta-line { flex-wrap: nowrap; }
+.meta-artist {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 11.5px;
+}
+.track-meta-line .meta-chip { flex: 0 0 auto; }

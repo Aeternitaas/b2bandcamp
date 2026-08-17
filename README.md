@@ -1,4 +1,4 @@
-# b2b/helper
+# b2bandcamp
 
 Self-hosted Bandcamp playlists. Collect tracks from across Bandcamp into your
 own playlists, reorder them, and share them with a link that lets other people
@@ -34,6 +34,11 @@ To close the instance to new sign-ups once your accounts exist, set
 
 **Playlists**
 - Create, rename, describe, and delete playlists
+- Configurable track columns — tempo, length and contributor can be shown,
+  hidden, reordered (drag the heading) and resized (drag its right edge); the
+  layout is remembered per browser
+- Tempo is editable inline, because detection gets tracks wrong
+- Filter by contributor, with original track numbering preserved
 - Set cover art by URL, or fall back to the first track's album art
 - Drag to reorder playlists; sort by name, recent activity, or track count
 - Drag to reorder tracks (works with touch, mouse, and keyboard)
@@ -42,10 +47,12 @@ To close the instance to new sign-ups once your accounts exist, set
 - Paste any Bandcamp album or track link
 - Search Bandcamp by album, track, or artist
 - Add a whole album with one button, or pick individual songs off it
+- Wishlist albums offer both explicitly rather than guessing which you meant
 
 **Wishlist sidebar**
-- Point a playlist at any Bandcamp user, then browse their wishlist in a
-  toggleable side panel
+- Enter any Bandcamp username (or display name, or profile link) and browse
+  their wishlist in a toggleable side panel — the choice is per-session and is
+  never saved to the playlist
 - Add a wishlisted album whole, or open it and add individual tracks
 - Pages through wishlists of any size
 
@@ -53,18 +60,38 @@ To close the instance to new sign-ups once your accounts exist, set
 
 | Visibility | Who can view | Who can edit |
 |---|---|---|
-| `private` | Owner only | Owner only — the share link stops working |
-| `shared` | Anyone with the link | Owner + signed-in visitors who open the link |
-| `public` | Anyone with the link | Anyone with the link, no account needed |
+| `private` | Owner + invited collaborators | Same — the share link stops working |
+| `shared` | Invited collaborators, or anyone with the link | Owner + invited collaborators |
+| `public` | Anyone (listed on the owner's profile) | Owner, invitees, or anyone with the link |
 
-Under `shared`, opening the link while signed in enrols you as a named
-collaborator, so the owner can see who has access and revoke individuals.
-Under `public`, edits are anonymous.
+Collaborators can be added two ways:
 
-**Playback**
+- **By name** — the owner invites an existing account by username or email.
+  This is the deliberate path: no link circulates, and each person can be
+  revoked individually.
+- **By link** — a 10-character invite link. Under `shared`, opening it while
+  signed in enrols you as a named collaborator. Under `public`, it grants
+  editing outright and edits may be anonymous.
+
+Public playlists are readable without any link (that is what makes them
+listable on a profile); editing them still requires the link or an invite.
+
+**Player**
 - Streams Bandcamp's public 128kbps previews, the same audio the Bandcamp
   website plays to logged-out visitors
-- Lock-screen and notification controls via the Media Session API
+- Volume control, and lock-screen/notification controls via the Media Session API
+- Expanded now-playing view with a waveform, detected tempo (BPM) and musical
+  key (with Camelot notation), a 0.5×–2× tempo slider that can preserve pitch,
+  the source album, a link out to Bandcamp, and one-tap saving to another playlist
+
+**Accounts**
+- Settings page for changing email and password (both require the current
+  password; changing the password signs out every other device)
+- Optionally link a Bandcamp profile and adopt its picture as your avatar
+- Public profile page listing your public playlists; owners can change any
+  playlist's visibility from there
+- Tracks are attributed to whoever added them, with their avatar (or coloured
+  initials derived from their account id)
 
 ---
 
@@ -81,9 +108,13 @@ a database leak does not yield usable sessions. They are delivered in a cookie
 that is `HttpOnly` (unreachable from JavaScript), `SameSite=Lax`, and `Secure`
 when `COOKIE_SECURE=true`. Expired sessions are purged hourly.
 
-Share tokens are generated and stored the same way — hashed, never in plaintext.
-This means a share link is shown **exactly once**, at creation; it cannot be
-recovered afterwards, only regenerated (which invalidates the previous link).
+Share tokens are 10 characters drawn with rejection sampling from a 57-symbol
+alphabet (~58 bits), which keeps links short enough to paste and retype while
+leaving guessing infeasible against the rate limiter. Lookups match on the
+SHA-256 hash. The raw token is **also** stored so an owner can retrieve their
+own invite link instead of being forced to rotate it — a deliberate trade: it
+means the database holds a working credential, which is an acceptable position
+for a single-box self-hosted deployment but would not be for a shared host.
 
 Other measures:
 
@@ -115,7 +146,7 @@ against live responses while building this:
 
 | Purpose | Endpoint |
 |---|---|
-| Search | `POST /api/bcsearch_public_api/1/autocomplete_elastic` |
+| Search (also used to resolve fans by display name) | `POST /api/bcsearch_public_api/1/autocomplete_elastic` |
 | URL → ids | the page's `bc-page-properties` meta tag |
 | Album/track detail | `GET /api/mobile/24/tralbum_details` |
 | Wishlist | `POST /api/fancollection/1/wishlist_items` |
@@ -137,6 +168,16 @@ the mobile API, which is both lighter and more stable.
 Metadata is cached in memory — 5 minutes for release detail (short, because it
 carries signed stream URLs), 30 minutes for URL→id mappings.
 
+**Analysis needs a proxy.** Bandcamp's CDN sends no CORS headers, so an
+`<audio>` element can play a stream but Web Audio only ever sees silence from
+it. `/api/bc/audio/{trackId}` therefore relays the bytes same-origin, which is
+what makes the waveform, BPM and key detection possible. It is used only when
+the analysis panel is open; ordinary playback still uses the redirect.
+
+**`wishlist_count` is unreliable.** Some profile pages report `0` even when the
+wishlist is populated, so the UI reports how many items it actually loaded
+rather than trusting that number.
+
 **Known limitation:** artists using a custom domain instead of a
 `*.bandcamp.com` address are rejected by the URL resolver, deliberately, since
 accepting arbitrary hosts would make that endpoint an SSRF primitive. Use the
@@ -148,7 +189,35 @@ you like from the artists.
 
 ---
 
+### Icons
+
+The UI contains no emoji. Emoji glyphs come from the OS font, so the same
+character renders differently (or not at all) across platforms and is announced
+unpredictably by screen readers. Icons are inline SVG from
+[Feather](https://feathericons.com) (MIT), copied into `src/components/Icon.tsx`
+rather than fetched — the CSP forbids external assets and the PWA must render
+offline.
+
+---
+
 ## Development
+
+### Hot reload
+
+```bash
+docker compose -f docker-compose.dev.yml up
+```
+
+Open <http://localhost:5173>. Both halves reload on save: Vite serves the UI
+with hot module replacement, and `air` rebuilds and restarts the Go server. The
+dev stack uses its own database volume, so it will not disturb the production
+one on port 9185.
+
+Vite proxies `/api` to the Go container, so there is no CORS configuration and
+no build step coupling the two. If your filesystem does not propagate inotify
+events into containers, set `VITE_USE_POLLING=true`.
+
+### Running the halves separately
 
 The two halves build and run independently.
 
@@ -181,6 +250,7 @@ server/
   internal/bandcamp/          Bandcamp client + TTL cache
   internal/api/               routing, middleware, access control, handlers
 web/
+  src/audio/                  waveform / tempo / key analysis + its worker
   src/state/                  auth and player contexts
   src/components/             player, sortable list, sidebar, modals
   src/pages/                  auth, playlist list, playlist detail, share view
@@ -195,6 +265,9 @@ access is granted with `X-Share-Token`.
 ```
 POST   /api/auth/register        POST   /api/auth/login
 POST   /api/auth/logout          GET    /api/auth/me
+PATCH  /api/account                     email / password (needs current password)
+POST   /api/account/bandcamp     DELETE /api/account/bandcamp
+PUT    /api/account/avatar
 
 GET    /api/playlists            POST   /api/playlists
 POST   /api/playlists/reorder
@@ -205,16 +278,31 @@ POST   /api/playlists/{id}/tracks
 POST   /api/playlists/{id}/tracks/reorder
 DELETE /api/playlists/{id}/tracks/{trackId}
 
-POST   /api/playlists/{id}/share      DELETE /api/playlists/{id}/share
+GET    /api/playlists/{id}/share      POST   /api/playlists/{id}/share
+DELETE /api/playlists/{id}/share
 GET    /api/share/{token}
 GET    /api/playlists/{id}/collaborators
+POST   /api/playlists/{id}/collaborators      invite by username or email
 DELETE /api/playlists/{id}/collaborators/{userId}
+GET    /api/users/search              GET    /api/users/{username}/profile
 
 GET    /api/bc/search?q=&type=        POST   /api/bc/resolve
 GET    /api/bc/details?type=&id=&band_id=
 GET    /api/bc/fan?username=          GET    /api/bc/wishlist?fan_id=&token=
-GET    /api/bc/stream/{trackId}?band_id=
+GET    /api/bc/stream/{trackId}?band_id=   302 redirect, used for playback
+GET    /api/bc/audio/{trackId}?band_id=    same-origin relay, used for analysis
 ```
+
+### Tests
+
+```bash
+cd server
+go test ./...            # includes live Bandcamp integration tests
+go test ./... -short     # skips anything that touches the network
+```
+
+The Bandcamp tests deliberately hit the real API. They are the tripwire for the
+thing most likely to break this app: Bandcamp changing a response shape.
 
 ---
 
@@ -226,7 +314,8 @@ GET    /api/bc/stream/{trackId}?band_id=
 | `WEB_DIR` | `./web` | Directory of built frontend files |
 | `MYSQL_DSN` | — | Full DSN; overrides the parts below |
 | `MYSQL_HOST` / `MYSQL_PORT` | `127.0.0.1` / `3306` | Database address |
-| `MYSQL_DATABASE` / `MYSQL_USER` / `MYSQL_PASSWORD` | `b2b_helper` / `b2b` / — | Credentials |
+| `MYSQL_DATABASE` / `MYSQL_USER` / `MYSQL_PASSWORD` | `b2bandcamp` / `b2bandcamp` / — | Credentials |
+| `SESSION_COOKIE` / `CSRF_COOKIE` | `b2bandcamp_session` / `b2bandcamp_csrf` | Cookie names |
 | `SESSION_TTL_DAYS` | `30` | Session lifetime |
 | `COOKIE_SECURE` | `false` | Set `true` when served over HTTPS |
 | `ALLOW_REGISTRATION` | `true` | Set `false` to close sign-ups |

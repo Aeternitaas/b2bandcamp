@@ -11,7 +11,10 @@ import (
 const playlistSelect = `
 SELECT p.id, p.owner_id, u.username, p.title, COALESCE(p.description, ''),
        COALESCE(p.cover_url, ''), p.visibility, p.share_token_hash IS NOT NULL,
-       p.base_fan_id, COALESCE(p.base_fan_username, ''), p.sort_index,
+       (SELECT ft.art_id FROM playlist_tracks ft
+         WHERE ft.playlist_id = p.id AND ft.art_id IS NOT NULL
+         ORDER BY ft.position ASC, ft.id ASC LIMIT 1) AS cover_art_id,
+       p.sort_index,
        COALESCE(t.cnt, 0), COALESCE(t.dur, 0), p.created_at, p.updated_at
   FROM playlists p
   JOIN users u ON u.id = p.owner_id
@@ -23,8 +26,8 @@ SELECT p.id, p.owner_id, u.username, p.title, COALESCE(p.description, ''),
 func scanPlaylist(row interface{ Scan(...any) error }) (*Playlist, error) {
 	var p Playlist
 	err := row.Scan(&p.ID, &p.OwnerID, &p.OwnerName, &p.Title, &p.Description,
-		&p.CoverURL, &p.Visibility, &p.HasShareLink, &p.BaseFanID, &p.BaseFanUsername,
-		&p.SortIndex, &p.TrackCount, &p.DurationSeconds, &p.CreatedAt, &p.UpdatedAt)
+		&p.CoverURL, &p.Visibility, &p.HasShareLink, &p.CoverArtID, &p.SortIndex,
+		&p.TrackCount, &p.DurationSeconds, &p.CreatedAt, &p.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -57,6 +60,30 @@ func (s *Store) ListPlaylistsForUser(ctx context.Context, userID int64) ([]*Play
 		} else {
 			p.Role = "collaborator"
 		}
+		out = append(out, p)
+	}
+	return out, rows.Err()
+}
+
+// PublicPlaylistsByOwner backs a user's profile page. Only playlists the owner
+// marked public are listed — private and shared ones stay invisible to anyone
+// browsing the profile.
+func (s *Store) PublicPlaylistsByOwner(ctx context.Context, username string) ([]*Playlist, error) {
+	rows, err := s.DB.QueryContext(ctx, playlistSelect+`
+ WHERE u.username = ? AND p.visibility = 'public'
+ ORDER BY p.sort_index ASC, p.updated_at DESC`, username)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := []*Playlist{}
+	for rows.Next() {
+		p, err := scanPlaylist(rows)
+		if err != nil {
+			return nil, err
+		}
+		p.Role = "viewer"
 		out = append(out, p)
 	}
 	return out, rows.Err()
@@ -107,9 +134,6 @@ type PlaylistUpdate struct {
 	Description     *string
 	CoverURL        *string
 	Visibility      *Visibility
-	BaseFanID       *int64
-	BaseFanUsername *string
-	ClearBaseFan    bool
 }
 
 func (s *Store) UpdatePlaylist(ctx context.Context, id int64, up PlaylistUpdate) error {
@@ -132,17 +156,6 @@ func (s *Store) UpdatePlaylist(ctx context.Context, id int64, up PlaylistUpdate)
 		sets = append(sets, "visibility = ?")
 		args = append(args, string(*up.Visibility))
 	}
-	if up.ClearBaseFan {
-		sets = append(sets, "base_fan_id = NULL", "base_fan_username = NULL")
-	} else if up.BaseFanID != nil {
-		sets = append(sets, "base_fan_id = ?", "base_fan_username = ?")
-		name := ""
-		if up.BaseFanUsername != nil {
-			name = *up.BaseFanUsername
-		}
-		args = append(args, *up.BaseFanID, name)
-	}
-
 	args = append(args, id)
 	_, err := s.DB.ExecContext(ctx,
 		`UPDATE playlists SET `+strings.Join(sets, ", ")+` WHERE id = ?`, args...)
@@ -182,22 +195,86 @@ func (s *Store) ReorderPlaylists(ctx context.Context, ownerID int64, ids []int64
 	return tx.Commit()
 }
 
-func (s *Store) SetShareTokenHash(ctx context.Context, id int64, hash *string) error {
+// SetShareToken stores a share link, or clears it when both arguments are nil.
+// The hash is what lookups match on; the raw token exists purely so the owner
+// can be shown the link again later.
+func (s *Store) SetShareToken(ctx context.Context, id int64, token, hash *string) error {
 	_, err := s.DB.ExecContext(ctx,
-		`UPDATE playlists SET share_token_hash = ?, updated_at = ? WHERE id = ?`,
-		hash, time.Now().UTC(), id)
+		`UPDATE playlists SET share_token_hash = ?, share_token = ?, updated_at = ? WHERE id = ?`,
+		hash, token, time.Now().UTC(), id)
 	return err
+}
+
+// ShareToken returns the playlist's current raw share token, if any. Callers
+// must have already established that the requester owns the playlist.
+func (s *Store) ShareToken(ctx context.Context, id int64) (string, error) {
+	var token sql.NullString
+	err := s.DB.QueryRowContext(ctx,
+		`SELECT share_token FROM playlists WHERE id = ?`, id).Scan(&token)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", ErrNotFound
+	}
+	if err != nil {
+		return "", err
+	}
+	return token.String, nil
+}
+
+// SharesByOwner lists every live share link belonging to one user, newest
+// first. Callers must have established that this is the owner: the rows carry
+// the raw tokens.
+func (s *Store) SharesByOwner(ctx context.Context, ownerID int64) ([]*ShareLink, error) {
+	rows, err := s.DB.QueryContext(ctx, `
+SELECT p.id, p.title, p.visibility, p.share_token, COALESCE(p.cover_url, ''),
+       (SELECT ft.art_id FROM playlist_tracks ft
+         WHERE ft.playlist_id = p.id AND ft.art_id IS NOT NULL
+         ORDER BY ft.position ASC, ft.id ASC LIMIT 1),
+       COALESCE(t.cnt, 0),
+       COALESCE(c.cnt, 0),
+       p.updated_at
+  FROM playlists p
+  LEFT JOIN (SELECT playlist_id, COUNT(*) AS cnt FROM playlist_tracks GROUP BY playlist_id) t
+         ON t.playlist_id = p.id
+  LEFT JOIN (SELECT playlist_id, COUNT(*) AS cnt FROM playlist_collaborators GROUP BY playlist_id) c
+         ON c.playlist_id = p.id
+ WHERE p.owner_id = ? AND p.share_token IS NOT NULL AND p.share_token <> ''
+ ORDER BY p.updated_at DESC`, ownerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := []*ShareLink{}
+	for rows.Next() {
+		var l ShareLink
+		if err := rows.Scan(&l.PlaylistID, &l.Title, &l.Visibility, &l.Token, &l.CoverURL,
+			&l.CoverArtID, &l.TrackCount, &l.Collaborators, &l.UpdatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, &l)
+	}
+	return out, rows.Err()
 }
 
 // ---------- tracks ----------
 
 func (s *Store) Tracks(ctx context.Context, playlistID int64) ([]*Track, error) {
+	// The adder and the cached analysis are joined in so the playlist view can
+	// show attribution, tempo and key without a round trip per row.
 	rows, err := s.DB.QueryContext(ctx,
-		`SELECT id, playlist_id, position, bc_track_id, bc_album_id, bc_band_id,
-		        title, artist, COALESCE(album_title, ''), duration, art_id,
-		        track_url, added_by, added_at
-		   FROM playlist_tracks WHERE playlist_id = ? ORDER BY position ASC, id ASC`,
-		playlistID)
+		`SELECT t.id, t.playlist_id, t.position, t.bc_track_id, t.bc_album_id, t.bc_band_id,
+		        t.title, t.artist, COALESCE(t.album_title, ''), t.duration, t.bpm,
+		        COALESCE(t.key_override, ''), t.art_id,
+		        t.track_url, t.added_by, t.added_at,
+		        COALESCE(u.username, ''), COALESCE(u.avatar_url, ''),
+		        a.bpm, COALESCE(a.key_camelot, ''), COALESCE(a.key_name, '')
+		   FROM playlist_tracks t
+		   LEFT JOIN users u ON u.id = t.added_by
+		   LEFT JOIN track_analysis a
+		          ON a.bc_track_id = t.bc_track_id
+		         AND a.analyzer_version >= ?
+		  WHERE t.playlist_id = ? ORDER BY t.position ASC, t.id ASC`,
+		AnalyzerVersion, playlistID)
 	if err != nil {
 		return nil, err
 	}
@@ -207,8 +284,10 @@ func (s *Store) Tracks(ctx context.Context, playlistID int64) ([]*Track, error) 
 	for rows.Next() {
 		var t Track
 		if err := rows.Scan(&t.ID, &t.PlaylistID, &t.Position, &t.TrackID, &t.AlbumID,
-			&t.BandID, &t.Title, &t.Artist, &t.AlbumTitle, &t.Duration, &t.ArtID,
-			&t.TrackURL, &t.AddedBy, &t.AddedAt); err != nil {
+			&t.BandID, &t.Title, &t.Artist, &t.AlbumTitle, &t.Duration, &t.BPM,
+			&t.KeyOverride, &t.ArtID,
+			&t.TrackURL, &t.AddedBy, &t.AddedAt, &t.AddedByName, &t.AddedByAvatar,
+			&t.DetectedBPM, &t.KeyCamelot, &t.KeyName); err != nil {
 			return nil, err
 		}
 		out = append(out, &t)
@@ -276,6 +355,30 @@ func (s *Store) DeleteTrack(ctx context.Context, playlistID, trackRowID int64) e
 	return err
 }
 
+// DeleteTracks removes several tracks in one statement, so a bulk delete either
+// lands entirely or not at all. The playlist_id predicate keeps ids belonging to
+// other playlists inert.
+func (s *Store) DeleteTracks(ctx context.Context, playlistID int64, ids []int64) (int64, error) {
+	if len(ids) == 0 {
+		return 0, nil
+	}
+
+	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(ids)), ",")
+	args := make([]any, 0, len(ids)+1)
+	args = append(args, playlistID)
+	for _, id := range ids {
+		args = append(args, id)
+	}
+
+	res, err := s.DB.ExecContext(ctx,
+		`DELETE FROM playlist_tracks WHERE playlist_id = ? AND id IN (`+placeholders+`)`, args...)
+	if err != nil {
+		return 0, err
+	}
+	s.TouchPlaylist(ctx, playlistID)
+	return res.RowsAffected()
+}
+
 // ReorderTracks rewrites positions from an ordered list of track row ids. The
 // playlist_id predicate keeps ids from other playlists inert.
 func (s *Store) ReorderTracks(ctx context.Context, playlistID int64, ids []int64) error {
@@ -302,6 +405,27 @@ func (s *Store) ReorderTracks(ctx context.Context, playlistID int64, ids []int64
 		return err
 	}
 	return tx.Commit()
+}
+
+// SetTrackBPM records a hand-entered tempo override for one playlist row. A nil
+// value clears the override, so the detected value takes over again.
+func (s *Store) SetTrackBPM(ctx context.Context, playlistID, trackRowID int64, bpm *float64) error {
+	_, err := s.DB.ExecContext(ctx,
+		`UPDATE playlist_tracks SET bpm = ? WHERE id = ? AND playlist_id = ?`,
+		bpm, trackRowID, playlistID)
+	return err
+}
+
+// SetTrackKey records a hand-entered Camelot code, or clears it when empty.
+func (s *Store) SetTrackKey(ctx context.Context, playlistID, trackRowID int64, camelot string) error {
+	var value any
+	if camelot != "" {
+		value = camelot
+	}
+	_, err := s.DB.ExecContext(ctx,
+		`UPDATE playlist_tracks SET key_override = ? WHERE id = ? AND playlist_id = ?`,
+		value, trackRowID, playlistID)
+	return err
 }
 
 // ---------- collaborators ----------

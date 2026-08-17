@@ -24,8 +24,8 @@ func Load() (*Config, error) {
 	c := &Config{
 		Port:          env("PORT", "9185"),
 		WebDir:        env("WEB_DIR", "./web"),
-		CookieName:    env("SESSION_COOKIE", "b2b_session"),
-		CSRFCookie:    env("CSRF_COOKIE", "b2b_csrf"),
+		CookieName:    env("SESSION_COOKIE", "b2bandcamp_session"),
+		CSRFCookie:    env("CSRF_COOKIE", "b2bandcamp_csrf"),
 		CookieSecure:  envBool("COOKIE_SECURE", false),
 		AllowRegister: envBool("ALLOW_REGISTRATION", true),
 	}
@@ -36,11 +36,11 @@ func Load() (*Config, error) {
 	if dsn := os.Getenv("MYSQL_DSN"); dsn != "" {
 		c.DSN = dsn
 	} else {
-		user := env("MYSQL_USER", "b2b")
+		user := env("MYSQL_USER", "b2bandcamp")
 		pass := os.Getenv("MYSQL_PASSWORD")
 		host := env("MYSQL_HOST", "127.0.0.1")
 		port := env("MYSQL_PORT", "3306")
-		name := env("MYSQL_DATABASE", "b2b_helper")
+		name := env("MYSQL_DATABASE", "b2bandcamp")
 		if pass == "" {
 			return nil, fmt.Errorf("MYSQL_PASSWORD (or MYSQL_DSN) must be set")
 		}

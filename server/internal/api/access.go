@@ -3,8 +3,8 @@ package api
 import (
 	"net/http"
 
-	"github.com/aeternitaas/b2b_helper/server/internal/auth"
-	"github.com/aeternitaas/b2b_helper/server/internal/store"
+	"github.com/aeternitaas/b2bandcamp/server/internal/auth"
+	"github.com/aeternitaas/b2bandcamp/server/internal/store"
 )
 
 // perms is the result of evaluating one caller against one playlist.
@@ -21,10 +21,11 @@ type perms struct {
 // collaborator) or a share token supplied in the X-Share-Token header. The
 // visibility setting decides how far a share token goes:
 //
-//	private — the token is inert; only the owner gets in.
+//	private — the token is inert; only the owner and invited collaborators.
 //	shared  — the token admits anyone, but editing requires signing in, so the
 //	          owner can see and revoke individual collaborators.
-//	public  — the token grants editing outright, no account needed.
+//	public  — anyone may view without a token (these are listed on the owner's
+//	          profile); the token additionally grants editing, no account needed.
 func (s *Server) access(r *http.Request, playlistID int64) (*store.Playlist, perms, error) {
 	ctx := r.Context()
 
@@ -47,8 +48,15 @@ func (s *Server) access(r *http.Request, playlistID int64) (*store.Playlist, per
 		}
 	}
 
+	// A public playlist is listed on its owner's profile, so viewing it must not
+	// require holding the link. Editing still does.
+	publicView := p.Visibility == store.VisibilityPublic
+
 	token := r.Header.Get("X-Share-Token")
 	if token == "" || p.Visibility == store.VisibilityPrivate {
+		if publicView {
+			return p, perms{view: true, role: "viewer"}, nil
+		}
 		return p, perms{role: "none"}, nil
 	}
 
@@ -56,6 +64,9 @@ func (s *Server) access(r *http.Request, playlistID int64) (*store.Playlist, per
 	// the hash rather than the raw token.
 	shared, err := s.st.PlaylistByShareHash(ctx, auth.HashToken(token))
 	if err != nil || shared.ID != p.ID {
+		if publicView {
+			return p, perms{view: true, role: "viewer"}, nil
+		}
 		return p, perms{role: "none"}, nil
 	}
 

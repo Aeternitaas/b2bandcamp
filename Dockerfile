@@ -34,7 +34,7 @@ COPY server/ ./
 RUN CGO_ENABLED=0 GOOS=linux go build \
       -trimpath \
       -ldflags="-s -w" \
-      -o /out/b2b-helper .
+      -o /out/b2bandcamp .
 
 
 # ---------------------------------------------------------------------------
@@ -48,7 +48,7 @@ RUN apk add --no-cache ca-certificates tzdata wget \
 
 WORKDIR /app
 
-COPY --from=server /out/b2b-helper /app/b2b-helper
+COPY --from=server /out/b2bandcamp /app/b2bandcamp
 COPY --from=web /web/dist /app/web
 
 USER app
@@ -61,4 +61,4 @@ EXPOSE 9185
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD wget -qO- http://127.0.0.1:9185/api/health || exit 1
 
-ENTRYPOINT ["/app/b2b-helper"]
+ENTRYPOINT ["/app/b2bandcamp"]

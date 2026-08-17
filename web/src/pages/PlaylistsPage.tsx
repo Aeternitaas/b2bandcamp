@@ -4,8 +4,9 @@ import { api } from '../api'
 import { Modal } from '../components/Modal'
 import { SortableList } from '../components/SortableList'
 import type { HandleProps } from '../components/SortableList'
-import { formatTotal } from '../utils'
+import { formatTotal, playlistCover } from '../utils'
 import type { Playlist } from '../types'
+import { Icon } from '../components/Icon'
 
 type SortMode = 'manual' | 'title' | 'updated' | 'tracks'
 
@@ -23,12 +24,16 @@ export function PlaylistsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [sort, setSort] = useState<SortMode>(
-    () => (localStorage.getItem('b2b:sort') as SortMode) || 'manual',
+    () => (localStorage.getItem('b2bandcamp:sort') as SortMode) || 'manual',
   )
 
   const [creating, setCreating] = useState(false)
   const [newTitle, setNewTitle] = useState('')
   const [busy, setBusy] = useState(false)
+  // Deleting a playlist destroys its tracks, so it goes through a confirmation
+  // step rather than firing straight from the row.
+  const [pendingDelete, setPendingDelete] = useState<Playlist | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   const load = useCallback(() => {
     setLoading(true)
@@ -40,7 +45,7 @@ export function PlaylistsPage() {
 
   useEffect(load, [load])
 
-  useEffect(() => { localStorage.setItem('b2b:sort', sort) }, [sort])
+  useEffect(() => { localStorage.setItem('b2bandcamp:sort', sort) }, [sort])
 
   // Only the custom order is persisted server-side; the others are views over
   // the same list, so switching back to custom restores the saved arrangement.
@@ -73,6 +78,21 @@ export function PlaylistsPage() {
     }
   }
 
+  const remove = async () => {
+    if (!pendingDelete) return
+    setDeleting(true)
+    setError('')
+    try {
+      await api.deletePlaylist(pendingDelete.id)
+      setPlaylists((prev) => prev.filter((p) => p.id !== pendingDelete.id))
+      setPendingDelete(null)
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   const reorder = async (next: Playlist[]) => {
     setPlaylists(next.map((p, i) => ({ ...p, sort_index: i })))
     try {
@@ -91,13 +111,13 @@ export function PlaylistsPage() {
           {...handle}
           onClick={(e) => e.stopPropagation()}
         >
-          ⠿
+          <Icon name="grip" size={14} />
         </div>
       )}
 
-      {p.cover_url
-        ? <img className="cover" src={p.cover_url} alt="" loading="lazy" />
-        : <div className="cover">♪</div>}
+      {playlistCover(p)
+        ? <img className="cover" src={playlistCover(p)} alt="" loading="lazy" />
+        : <div className="cover"><Icon name="music" size={20} /></div>}
 
       <div className="track-meta">
         <div className="track-title truncate">{p.title}</div>
@@ -108,6 +128,17 @@ export function PlaylistsPage() {
       </div>
 
       <span className={`badge ${p.visibility}`}>{p.visibility}</span>
+
+      {p.role === 'owner' && (
+        <button
+          className="ghost danger badge-button"
+          aria-label={`Delete ${p.title}`}
+          title="Delete playlist"
+          onClick={(e) => { e.stopPropagation(); setPendingDelete(p) }}
+        >
+          <Icon name="x" size={11} />
+        </button>
+      )}
     </div>
   )
 
@@ -152,7 +183,27 @@ export function PlaylistsPage() {
       )}
 
       {sort === 'manual' && playlists.length > 1 && (
-        <span className="faint small">Drag the ⠿ handle to reorder. Custom order is saved automatically.</span>
+        <span className="faint small">Drag the handle to reorder. Custom order is saved automatically.</span>
+      )}
+
+      {pendingDelete && (
+        <Modal
+          title="Delete playlist"
+          onClose={() => setPendingDelete(null)}
+          footer={
+            <>
+              <button className="danger" onClick={remove} disabled={deleting}>
+                {deleting ? <div className="spin" /> : null} Delete permanently
+              </button>
+              <button className="ghost" onClick={() => setPendingDelete(null)}>Cancel</button>
+            </>
+          }
+        >
+          <div className="notice error">
+            Delete “{pendingDelete.title}” and its {pendingDelete.track_count} track
+            {pendingDelete.track_count === 1 ? '' : 's'}? This cannot be undone.
+          </div>
+        </Modal>
       )}
 
       {creating && (

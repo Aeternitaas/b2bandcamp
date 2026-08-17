@@ -16,6 +16,11 @@ interface Props<T> {
   onReorder: (items: T[]) => void
   renderItem: (item: T, ctx: { index: number; dragging: boolean; handle: HandleProps }) => ReactNode
   disabled?: boolean
+  /**
+   * Keys of selected items. Dragging any one of them moves the whole selection
+   * as a contiguous block, which is what "move these three together" means.
+   */
+  selectedKeys?: Set<string | number>
 }
 
 /**
@@ -27,15 +32,19 @@ interface Props<T> {
  * dragging anywhere else still scrolls the page, and arrow keys on the focused
  * handle provide a non-pointer path to the same operation.
  */
-export function SortableList<T>({ items, keyOf, onReorder, renderItem, disabled }: Props<T>) {
+export function SortableList<T>({
+  items, keyOf, onReorder, renderItem, disabled, selectedKeys,
+}: Props<T>) {
   const [order, setOrder] = useState(items)
   const [dragIndex, setDragIndex] = useState(-1)
 
   const containerRef = useRef<HTMLDivElement>(null)
   const orderRef = useRef(order)
   const dragRef = useRef(-1)
+  const selectedRef = useRef(selectedKeys)
   orderRef.current = order
   dragRef.current = dragIndex
+  selectedRef.current = selectedKeys
 
   // Adopt changes from the parent, except mid-drag where local state is the
   // source of truth for what the user is currently seeing.
@@ -68,13 +77,38 @@ export function SortableList<T>({ items, keyOf, onReorder, renderItem, disabled 
       const from = dragRef.current
       if (from === -1) return
       const to = indexAt(ev.clientY)
-      if (to !== -1 && to !== from) {
-        const next = moveItem(orderRef.current, from, to)
-        orderRef.current = next
-        dragRef.current = to
-        setOrder(next)
-        setDragIndex(to)
+      if (to === -1 || to === from) return
+
+      const current = orderRef.current
+      const selection = selectedRef.current
+      const dragged = current[from]
+      const asBlock = !!selection && selection.size > 1 && selection.has(keyOf(dragged))
+
+      let next: T[]
+      if (asBlock) {
+        const anchor = current[to]
+        // Hovering over the block itself is not a move.
+        if (selection!.has(keyOf(anchor))) return
+
+        const block = current.filter((item) => selection!.has(keyOf(item)))
+        const others = current.filter((item) => !selection!.has(keyOf(item)))
+        const anchorAt = others.findIndex((item) => keyOf(item) === keyOf(anchor))
+        const firstSelected = current.findIndex((item) => selection!.has(keyOf(item)))
+
+        // Land after the hovered row when dragging down and before it when
+        // dragging up, so dropping past the last row puts the block at the end
+        // rather than one short of it.
+        const at = to > firstSelected ? anchorAt + 1 : anchorAt
+        next = [...others.slice(0, at), ...block, ...others.slice(at)]
+      } else {
+        next = moveItem(current, from, to)
       }
+
+      orderRef.current = next
+      const landed = next.findIndex((item) => keyOf(item) === keyOf(dragged))
+      dragRef.current = landed
+      setOrder(next)
+      setDragIndex(landed)
     }
 
     const onUp = () => {

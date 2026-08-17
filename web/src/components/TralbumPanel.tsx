@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { api } from '../api'
 import { formatDuration } from '../utils'
 import type { Tralbum, TrackRef } from '../types'
+import { Icon } from './Icon'
 
 interface Props {
   type: 'a' | 't'
@@ -67,7 +68,7 @@ export function TralbumPanel({ type, id, bandId, onAdd, onBack }: Props) {
   if (error && !detail) {
     return (
       <div className="col">
-        {onBack && <button className="ghost" onClick={onBack}>← Back</button>}
+        {onBack && <button className="ghost" onClick={onBack}><Icon name="arrow-left" /> Back</button>}
         <div className="notice error">{error}</div>
       </div>
     )
@@ -79,13 +80,15 @@ export function TralbumPanel({ type, id, bandId, onAdd, onBack }: Props) {
   return (
     <div className="col">
       {onBack && (
-        <button className="ghost" onClick={onBack} style={{ alignSelf: 'flex-start' }}>← Back</button>
+        <button className="ghost" onClick={onBack} style={{ alignSelf: 'flex-start' }}>
+          <Icon name="arrow-left" /> Back
+        </button>
       )}
 
       <div className="row" style={{ alignItems: 'flex-start' }}>
         {detail.art_url
           ? <img className="cover lg" src={detail.art_url} alt="" loading="lazy" />
-          : <div className="cover lg">♪</div>}
+          : <div className="cover lg"><Icon name="music" size={34} /></div>}
 
         <div className="col" style={{ gap: 6, minWidth: 0, flex: 1 }}>
           <h2 className="truncate">{detail.title}</h2>
@@ -101,7 +104,7 @@ export function TralbumPanel({ type, id, bandId, onAdd, onBack }: Props) {
             disabled={busy !== null || streamable.length === 0}
             style={{ marginTop: 4 }}
           >
-            {busy === 'all' ? <div className="spin" /> : '+'}
+            {busy === 'all' ? <div className="spin" /> : <Icon name="plus" />}
             {type === 'a' ? ` Add whole album (${streamable.length})` : ' Add track'}
           </button>
         </div>
@@ -127,7 +130,7 @@ export function TralbumPanel({ type, id, bandId, onAdd, onBack }: Props) {
                   onClick={() => addOne(t.track_id, t.band_id)}
                   aria-label={`Add ${t.title}`}
                 >
-                  {busy === t.track_id ? <div className="spin" /> : isAdded ? '✓' : '+'}
+                  {busy === t.track_id ? <div className="spin" /> : <Icon name={isAdded ? 'check' : 'plus'} />}
                 </button>
               </div>
             )
@@ -136,7 +139,7 @@ export function TralbumPanel({ type, id, bandId, onAdd, onBack }: Props) {
       )}
 
       <a href={detail.url} target="_blank" rel="noreferrer noopener" className="small">
-        Open on Bandcamp ↗
+        Open on Bandcamp <Icon name="external-link" size={13} />
       </a>
     </div>
   )
