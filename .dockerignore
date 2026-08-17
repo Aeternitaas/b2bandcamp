@@ -1,0 +1,11 @@
+.git
+.gitignore
+.env
+README.md
+**/node_modules
+web/dist
+*.log
+.idea
+.vscode
+
+server/.air-tmp
