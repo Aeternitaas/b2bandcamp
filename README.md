@@ -4,6 +4,8 @@ Self-hosted Bandcamp playlists. Collect tracks from across Bandcamp into your
 own playlists, reorder them, and share them with a link that lets other people
 edit alongside you.
 
+<img width="1065" height="476" alt="image" src="https://github.com/user-attachments/assets/2c2e6e88-32b1-444e-b824-cc730c977858" />
+
 Playlists are entirely local to this app and it does not use, read, or write
 Bandcamp's own playlist features.
 
