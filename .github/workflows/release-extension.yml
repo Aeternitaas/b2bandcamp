@@ -1,16 +1,16 @@
 name: Release extension
 
-# Tag push builds and publishes automatically; workflow_dispatch lets you
-# re-run the same build for an existing tag without pushing a new one.
+# Tag push builds and publishes automatically. workflow_dispatch needs no
+# input, it reads extension/manifest.json's version on whichever branch you
+# run it from (pick that branch from the "Run workflow" dropdown) and tags
+# that version itself, rather than expecting a tag to already exist, an
+# explicit ref here that does not already exist on the remote is exactly
+# what broke this before: actions/checkout failed trying to fetch it.
 on:
   push:
     tags:
       - "extension-v*"
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: "Existing tag to build (e.g. extension-v1.2.0)"
-        required: true
+  workflow_dispatch: {}
 
 permissions:
   contents: write
@@ -22,20 +22,30 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.tag || github.ref }}
+          fetch-depth: 0
 
-      - name: Resolve tag and version
+      - name: Resolve version and tag
         id: version
         run: |
-          TAG="${{ github.event.inputs.tag || github.ref_name }}"
-          VERSION="${TAG#extension-v}"
-          MANIFEST_VERSION=$(node -p "require('./extension/manifest.json').version")
-          if [ "$VERSION" != "$MANIFEST_VERSION" ]; then
-            echo "Tag $TAG (version $VERSION) does not match extension/manifest.json version $MANIFEST_VERSION" >&2
+          VERSION=$(node -p "require('./extension/manifest.json').version")
+          TAG="extension-v$VERSION"
+          if [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref_name }}" != "$TAG" ]; then
+            echo "Pushed tag ${{ github.ref_name }} does not match extension/manifest.json version $VERSION (expected $TAG)" >&2
             exit 1
           fi
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Tag this version
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
+            echo "$TAG already exists on origin, releasing it as-is."
+          else
+            git tag "$TAG"
+            git push origin "$TAG"
+          fi
 
       - name: Package extension
         run: |

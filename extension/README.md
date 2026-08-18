@@ -86,13 +86,22 @@ want to build your own integration instead of using this extension.
 
 ## Releasing
 
-Pushing a tag named `extension-vX.Y.Z`, matching the `version` field in
-`manifest.json`, runs `.github/workflows/release-extension.yml`. It zips
-this folder and publishes a GitHub release with the zip attached, ready to
-unzip and load as an unpacked extension. Bump `manifest.json`'s `version`
-first, commit it, then tag:
+`.github/workflows/release-extension.yml` zips this folder and publishes a
+GitHub release with the zip attached, ready to unzip and load as an
+unpacked extension. Bump `manifest.json`'s `version` and commit it, then
+either:
 
-```
-git tag extension-v1.0.1
-git push origin extension-v1.0.1
-```
+- **Push a matching tag** (`extension-vX.Y.Z`), which triggers the release
+  automatically:
+
+  ```
+  git tag extension-v1.0.1
+  git push origin extension-v1.0.1
+  ```
+
+- **Or run it manually**: Actions -> Release extension -> Run workflow, on
+  the branch with the version bump. No input needed, it reads the version
+  straight from `manifest.json` and creates the tag itself. Don't type a
+  tag name into a workflow's manual-run form unless you already pushed that
+  exact tag, `actions/checkout` fails trying to fetch a ref that does not
+  exist on the remote yet.
