@@ -45,11 +45,18 @@ export function SortableList<T>({
   const [order, setOrder] = useState(items)
   const [dragIndex, setDragIndex] = useState(-1)
   const [externalDragOver, setExternalDragOver] = useState(false)
+  // Where a link dragged in from outside would land if dropped right now,
+  // 0..order.length inclusive (order.length means "after everything"), and
+  // the height to open up there to preview it, measured from a real row so
+  // it matches whatever size the rows actually are.
+  const [externalDragIndex, setExternalDragIndex] = useState(-1)
+  const [gapHeight, setGapHeight] = useState(0)
 
   const containerRef = useRef<HTMLDivElement>(null)
   const orderRef = useRef(order)
   const dragRef = useRef(-1)
   const selectedRef = useRef(selectedKeys)
+  const externalDragOverRef = useRef(false)
   orderRef.current = order
   dragRef.current = dragIndex
   selectedRef.current = selectedKeys
@@ -60,7 +67,9 @@ export function SortableList<T>({
     if (dragRef.current === -1) setOrder(items)
   }, [items])
 
-  /** Index whose midpoint the pointer has crossed. */
+  /** Index whose midpoint the pointer has crossed, for moving an existing
+   *  row, always a valid index into `order` (never past the last one, there
+   *  is nowhere for an existing row to land "after" the last position). */
   const indexAt = useCallback((clientY: number): number => {
     const container = containerRef.current
     if (!container) return -1
@@ -70,6 +79,21 @@ export function SortableList<T>({
       if (clientY < rect.top + rect.height / 2) return i
     }
     return rows.length - 1
+  }, [])
+
+  /** Where a link dropped in from outside should be inserted, 0..order.length
+   *  inclusive. Unlike indexAt above, past the last row's midpoint has to
+   *  mean "after everything" (order.length), not "before the last row", an
+   *  external drop has no existing row of its own to take that row's place. */
+  const insertionIndexAt = useCallback((clientY: number): number => {
+    const container = containerRef.current
+    if (!container) return 0
+    const rows = Array.from(container.children) as HTMLElement[]
+    for (let i = 0; i < rows.length; i++) {
+      const rect = rows[i].getBoundingClientRect()
+      if (clientY < rect.top + rect.height / 2) return i
+    }
+    return rows.length
   }, [])
 
   const beginDrag = useCallback((index: number, e: React.PointerEvent) => {
@@ -153,21 +177,50 @@ export function SortableList<T>({
     onReorder(next)
   }, [disabled, onReorder])
 
+  const clearExternalDrag = useCallback(() => {
+    externalDragOverRef.current = false
+    setExternalDragOver(false)
+    setExternalDragIndex(-1)
+  }, [])
+
   return (
     <div
       ref={containerRef}
       className={`track-list${externalDragOver ? ' drop-target' : ''}`}
-      onDragOver={onDropExternal && ((e) => { e.preventDefault(); setExternalDragOver(true) })}
-      onDragLeave={onDropExternal && (() => setExternalDragOver(false))}
+      onDragOver={onDropExternal && ((e) => {
+        e.preventDefault()
+        if (!externalDragOverRef.current) {
+          externalDragOverRef.current = true
+          setExternalDragOver(true)
+          // Match the gap to a real row's height, measured once per drag so
+          // it does not keep re-reading layout on every dragover.
+          const first = containerRef.current?.children[0] as HTMLElement | undefined
+          if (first) setGapHeight(first.getBoundingClientRect().height)
+        }
+        setExternalDragIndex(insertionIndexAt(e.clientY))
+      })}
+      onDragLeave={onDropExternal && ((e) => {
+        // dragleave also fires when crossing from the container onto a
+        // child row, only actually leaving the whole list should clear it.
+        if (e.currentTarget.contains(e.relatedTarget as Node | null)) return
+        clearExternalDrag()
+      })}
       onDrop={onDropExternal && ((e) => {
         e.preventDefault()
-        setExternalDragOver(false)
-        const index = indexAt(e.clientY)
-        onDropExternal(index === -1 ? order.length : index, e)
+        const index = externalDragIndex === -1 ? insertionIndexAt(e.clientY) : externalDragIndex
+        clearExternalDrag()
+        onDropExternal(index, e)
       })}
     >
       {order.map((item, index) => (
-        <div key={keyOf(item)}>
+        <div
+          key={keyOf(item)}
+          className="track-list-item"
+          style={{
+            marginTop: externalDragIndex === index ? gapHeight : undefined,
+            marginBottom: externalDragIndex === order.length && index === order.length - 1 ? gapHeight : undefined,
+          }}
+        >
           {renderItem(item, {
             index,
             dragging: index === dragIndex,

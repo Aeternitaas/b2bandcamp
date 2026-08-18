@@ -296,6 +296,10 @@ button.icon { min-height: 36px; padding: 6px 8px; }
 
 .track-list { display: flex; flex-direction: column; }
 .track-list.drop-target { outline: 2px dashed var(--accent); outline-offset: -2px; border-radius: var(--radius); }
+/* Always transitioning, not just while a margin is actually set, so the
+   gap previewing where a dragged-in link would land opens and closes
+   smoothly instead of snapping the moment the target row changes. */
+.track-list-item { transition: margin-top .18s ease, margin-bottom .18s ease; }
 
 .track-row {
   display: flex;
