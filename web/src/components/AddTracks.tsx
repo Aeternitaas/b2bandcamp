@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../api'
 import { Modal } from './Modal'
 import { TralbumPanel } from './TralbumPanel'
@@ -10,7 +10,6 @@ import { Icon } from './Icon'
 interface Props {
   onClose: () => void
   onAdd: (refs: TrackRef[]) => Promise<void>
-  onAddUrl: (url: string) => Promise<void>
 }
 
 type Selection = { type: 'a' | 't'; id: number; bandId: number }
@@ -23,11 +22,13 @@ const TABS: { key: string; label: string }[] = [
 ]
 
 /**
- * Two ways in: paste a Bandcamp album or track link, or search Bandcamp. Both
- * land on the same expanded release view, so adding a whole album and cherry-
- * picking a single song are the same two clicks either way.
+ * Two ways in: paste a Bandcamp link, or search Bandcamp. Both land on the
+ * same expanded release view — with a preview — before anything is added,
+ * whether it turns out to be a whole album or a single track. Each search
+ * result also has its own quick-add "+", for adding several different
+ * matches straight from the list without opening any of them.
  */
-export function AddTracks({ onClose, onAdd, onAddUrl }: Props) {
+export function AddTracks({ onClose, onAdd }: Props) {
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState('')
   const [results, setResults] = useState<SearchResult[]>([])
@@ -35,6 +36,11 @@ export function AddTracks({ onClose, onAdd, onAddUrl }: Props) {
   const [error, setError] = useState('')
   const [selected, setSelected] = useState<Selection | null>(null)
   const [addingUrl, setAddingUrl] = useState(false)
+  // Per-row quick-add, keyed by "type-id" — lets several different results be
+  // added straight from the list, one "+" press each, without opening any of
+  // them and without the popup closing in between.
+  const [addingRow, setAddingRow] = useState<string | null>(null)
+  const [addedRows, setAddedRows] = useState<Set<string>>(new Set())
 
   const inputRef = useRef<HTMLInputElement>(null)
   useEffect(() => { inputRef.current?.focus() }, [])
@@ -66,27 +72,37 @@ export function AddTracks({ onClose, onAdd, onAddUrl }: Props) {
       .finally(() => setLoading(false))
   }, 280), [])
 
+  // A pasted link resolves to the same expanded release view a search result
+  // opens into — art, title, artist, and a preview, whether it turns out to
+  // be a whole album or a single track — rather than committing to adding it
+  // sight (and sound) unheard. The preview itself loads as soon as a
+  // recognisable link is pasted, same as search results loading as you type;
+  // only the audio stays behind an explicit press, inside that view.
+  const runResolveUrl = useMemo(() => debounce((url: string) => {
+    api.resolveUrl(url)
+      .then((detail) => {
+        setSelected({ type: detail.type, id: detail.id, bandId: detail.band_id })
+        setQuery('')
+        setError('')
+      })
+      .catch((e: Error) => setError(e.message))
+      .finally(() => setAddingUrl(false))
+  }, 280), [])
+
   useEffect(() => {
-    if (!query.trim() || isUrl) {
+    if (!query.trim()) {
       setResults([])
+      return
+    }
+    if (isUrl) {
+      setAddingUrl(true)
+      setError('')
+      runResolveUrl(query.trim())
       return
     }
     setLoading(true)
     runSearch(query)
-  }, [query, filter, isUrl, runSearch])
-
-  const submitUrl = useCallback(async () => {
-    setAddingUrl(true)
-    setError('')
-    try {
-      await onAddUrl(query.trim())
-      setQuery('')
-    } catch (e) {
-      setError((e as Error).message)
-    } finally {
-      setAddingUrl(false)
-    }
-  }, [onAddUrl, query])
+  }, [query, filter, isUrl, runSearch, runResolveUrl])
 
   /** Albums have no audio of their own, so preview their first playable track. */
   const previewResult = async (r: SearchResult) => {
@@ -124,6 +140,23 @@ export function AddTracks({ onClose, onAdd, onAddUrl }: Props) {
     }
   }
 
+  /** Adds a result straight from the list — the whole release if it is an
+   *  album — so several different matches can be added in a row without
+   *  opening any of them. */
+  const quickAdd = async (r: SearchResult) => {
+    const key = `${r.type}-${r.id}`
+    setAddingRow(key)
+    setError('')
+    try {
+      await onAdd([{ type: r.type as 'a' | 't', id: r.id, band_id: r.band_id ?? 0 }])
+      setAddedRows((prev) => new Set(prev).add(key))
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setAddingRow(null)
+    }
+  }
+
   const pick = (r: SearchResult) => {
     if (r.type === 'b') {
       // An artist has no tracks of its own — search their catalogue instead.
@@ -155,17 +188,14 @@ export function AddTracks({ onClose, onAdd, onAddUrl }: Props) {
               value={query}
               placeholder="https://artist.bandcamp.com/album/… or a search term"
               onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter' && isUrl) void submitUrl() }}
               autoComplete="off"
               autoCapitalize="off"
               spellCheck={false}
             />
           </div>
 
-          {isUrl && (
-            <button className="primary" onClick={submitUrl} disabled={addingUrl}>
-              {addingUrl ? <div className="spin" /> : <Icon name="plus" />} Add from link
-            </button>
+          {isUrl && addingUrl && (
+            <div className="row"><div className="spin" /> <span className="dim small">Loading preview…</span></div>
           )}
 
           {!isUrl && (
@@ -233,6 +263,24 @@ export function AddTracks({ onClose, onAdd, onAddUrl }: Props) {
                   <span className="badge">
                     {r.type === 'a' ? 'album' : r.type === 't' ? 'track' : 'artist'}
                   </span>
+
+                  {previewable && (() => {
+                    const key = `${r.type}-${r.id}`
+                    const isAdded = addedRows.has(key)
+                    return (
+                      <button
+                        className={isAdded ? 'ghost icon' : 'icon'}
+                        disabled={addingRow !== null || isAdded}
+                        onClick={() => void quickAdd(r)}
+                        aria-label={`Add ${r.name}`}
+                        title={r.type === 'a' ? 'Add whole album' : 'Add track'}
+                      >
+                        {addingRow === key
+                          ? <div className="spin" />
+                          : <Icon name={isAdded ? 'check' : 'plus'} size={13} />}
+                      </button>
+                    )
+                  })()}
                 </div>
               )
             })}

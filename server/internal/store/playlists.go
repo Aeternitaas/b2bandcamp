@@ -264,7 +264,7 @@ func (s *Store) Tracks(ctx context.Context, playlistID int64) ([]*Track, error) 
 	rows, err := s.DB.QueryContext(ctx,
 		`SELECT t.id, t.playlist_id, t.position, t.bc_track_id, t.bc_album_id, t.bc_band_id,
 		        t.title, t.artist, COALESCE(t.album_title, ''), t.duration, t.bpm,
-		        COALESCE(t.key_override, ''), t.art_id,
+		        COALESCE(t.key_override, ''), COALESCE(t.note, ''), t.art_id,
 		        t.track_url, t.added_by, t.added_at,
 		        COALESCE(u.username, ''), COALESCE(u.avatar_url, ''),
 		        a.bpm, COALESCE(a.key_camelot, ''), COALESCE(a.key_name, '')
@@ -285,7 +285,7 @@ func (s *Store) Tracks(ctx context.Context, playlistID int64) ([]*Track, error) 
 		var t Track
 		if err := rows.Scan(&t.ID, &t.PlaylistID, &t.Position, &t.TrackID, &t.AlbumID,
 			&t.BandID, &t.Title, &t.Artist, &t.AlbumTitle, &t.Duration, &t.BPM,
-			&t.KeyOverride, &t.ArtID,
+			&t.KeyOverride, &t.Note, &t.ArtID,
 			&t.TrackURL, &t.AddedBy, &t.AddedAt, &t.AddedByName, &t.AddedByAvatar,
 			&t.DetectedBPM, &t.KeyCamelot, &t.KeyName); err != nil {
 			return nil, err
@@ -424,6 +424,19 @@ func (s *Store) SetTrackKey(ctx context.Context, playlistID, trackRowID int64, c
 	}
 	_, err := s.DB.ExecContext(ctx,
 		`UPDATE playlist_tracks SET key_override = ? WHERE id = ? AND playlist_id = ?`,
+		value, trackRowID, playlistID)
+	return err
+}
+
+// SetTrackNote records a hand-written note against one playlist row, or
+// clears it when empty.
+func (s *Store) SetTrackNote(ctx context.Context, playlistID, trackRowID int64, note string) error {
+	var value any
+	if note != "" {
+		value = note
+	}
+	_, err := s.DB.ExecContext(ctx,
+		`UPDATE playlist_tracks SET note = ? WHERE id = ? AND playlist_id = ?`,
 		value, trackRowID, playlistID)
 	return err
 }

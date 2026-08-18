@@ -44,6 +44,8 @@ export interface Track {
   bpm: number | null
   /** Hand-entered Camelot code; empty means use key_camelot from analysis. */
   key_override: string
+  /** Free-text, hand-entered; empty when nobody has written one. */
+  note: string
   /** From the shared analysis cache. */
   detected_bpm: number | null
   key_camelot: string
@@ -122,6 +124,8 @@ export interface Tralbum {
   url: string
   about?: string
   release_date?: string
+  /** Up to 3 tags that match one of Bandcamp's own established genres. */
+  genres?: string[]
   tracks: BCTrack[]
 }
 

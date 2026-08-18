@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Icon } from './Icon'
 import { moveItem } from '../utils'
 
-export type ColumnKey = 'bpm' | 'key' | 'duration' | 'contributor' | 'addedOn'
+export type ColumnKey = 'bpm' | 'key' | 'duration' | 'notes' | 'contributor' | 'addedOn'
 
 export interface ColumnConfig {
   key: ColumnKey
@@ -14,6 +14,7 @@ export const COLUMN_LABELS: Record<ColumnKey, string> = {
   bpm: 'BPM',
   key: 'Key',
   duration: 'Time',
+  notes: 'Notes',
   contributor: 'Added by',
   addedOn: 'Added on',
 }
@@ -34,6 +35,7 @@ export const SORT_LABELS: Record<SortKey, string> = {
   bpm: 'BPM',
   key: 'Key',
   duration: 'Time',
+  notes: 'Notes',
   contributor: 'Added by',
   addedOn: 'Added on',
 }
@@ -46,14 +48,16 @@ const MAX_WIDTH = 220
 // Versioned: widths are saved per browser, so a stored layout would otherwise
 // pin existing users to an old default forever. Bump this whenever a default
 // width changes, or the change will not reach anyone who has used the app.
-const STORAGE_KEY = 'b2bandcamp:columns:v4'
+const STORAGE_KEY = 'b2bandcamp:columns:v5'
 
 // BPM sits to the left of the time, which is the order these are read in when
-// beat-matching. "Added on" trails "Added by" — who, then when.
+// beat-matching. Notes trails Time; "Added on" trails "Added by" — who, then
+// when.
 const DEFAULT_COLUMNS: ColumnConfig[] = [
   { key: 'bpm', visible: true, width: 62 },
   { key: 'key', visible: true, width: 62 },
   { key: 'duration', visible: true, width: 56 },
+  { key: 'notes', visible: true, width: 140 },
   { key: 'contributor', visible: true, width: 44 },
   { key: 'addedOn', visible: true, width: 56 },
 ]
@@ -156,8 +160,21 @@ export function TrackColumnHeader({
   const rowRef = useRef<HTMLDivElement>(null)
   const [dragging, setDragging] = useState<number>(-1)
 
-  const startResize = (key: ColumnKey, startX: number, startWidth: number, target: HTMLElement) => {
-    target.setPointerCapture?.(0)
+  const startResize = (
+    key: ColumnKey, startX: number, startWidth: number, target: HTMLElement, pointerId: number,
+  ) => {
+    // Pointer id 0 (used here previously) does not belong to any real
+    // pointer, so this threw InvalidPointerId and aborted before the drag
+    // listeners below were ever attached — resizing did nothing, silently,
+    // for every column. try/catch is still worth keeping: capture is a nice-
+    // to-have (keeps the drag tracking even if the pointer strays outside the
+    // handle), not a requirement, since the actual move/up listeners are on
+    // window regardless.
+    try {
+      target.setPointerCapture?.(pointerId)
+    } catch {
+      // ignored — the window-level listeners below work without it
+    }
 
     const onMove = (e: PointerEvent) => {
       e.preventDefault()
@@ -276,7 +293,7 @@ export function TrackColumnHeader({
             onPointerDown={(e) => {
               e.preventDefault()
               e.stopPropagation()
-              startResize(col.key, e.clientX, col.width, e.currentTarget as HTMLElement)
+              startResize(col.key, e.clientX, col.width, e.currentTarget as HTMLElement, e.pointerId)
             }}
           />
         </span>

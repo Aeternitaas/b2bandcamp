@@ -51,6 +51,7 @@ export function usePreview() {
         duration: source.duration ?? 0,
         bpm: null,
         key_override: '',
+        note: '',
         detected_bpm: null,
         key_camelot: '',
         key_name: '',

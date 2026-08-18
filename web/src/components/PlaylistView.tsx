@@ -7,8 +7,8 @@ import { ContributorMenu } from './ContributorMenu'
 import { Icon } from './Icon'
 import {
   TrackColumnHeader, TrackColumnPanel, trackGridTemplate, useTrackColumns,
-} from './trackColumns'
-import type { SortKey, SortState } from './trackColumns'
+} from './TrackColumns'
+import type { SortKey, SortState } from './TrackColumns'
 import { TrackRow } from './TrackRow'
 import { useCompactLayout } from '../hooks/useMediaQuery'
 import { PlaylistSettings } from './PlaylistSettings'
@@ -94,6 +94,7 @@ export function PlaylistView({
 
   const [showFilter, setShowFilter] = useState(false)
   const [showColumns, setShowColumns] = useState(false)
+  const [showAnalyzeMenu, setShowAnalyzeMenu] = useState(false)
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [bulkBusy, setBulkBusy] = useState(false)
   const [analyzing, setAnalyzing] = useState<{ done: number; total: number } | null>(null)
@@ -215,11 +216,36 @@ export function PlaylistView({
     onPlaylistChange({ ...playlist, track_count: res.tracks.length })
   }, [playlist, onPlaylistChange, onTracksChange])
 
-  const addUrl = useCallback(async (url: string) => {
-    const res = await api.addTracks(playlist.id, { url })
-    onTracksChange(res.tracks)
-    onPlaylistChange({ ...playlist, track_count: res.tracks.length })
-  }, [playlist, onPlaylistChange, onTracksChange])
+  /**
+   * Resolves a dropped link and lands it at the row it was dropped on,
+   * rather than always at the end. There is no "insert at position" endpoint
+   * — this adds normally (which appends) and then reorders, reusing the same
+   * two calls a drag-to-reorder already makes.
+   */
+  const addUrlAt = useCallback(async (index: number, e: React.DragEvent) => {
+    const raw = e.dataTransfer.getData('text/uri-list') || e.dataTransfer.getData('text/plain')
+    // A uri-list can carry comment lines (RFC 2483) ahead of the actual URL.
+    const url = raw.split('\n').map((l) => l.trim()).find((l) => l && !l.startsWith('#'))
+    if (!url) return
+
+    const before = new Set(tracks.map((t) => t.id))
+    setError('')
+    try {
+      const detail = await api.resolveUrl(url)
+      const res = await api.addTracks(playlist.id, {
+        items: [{ type: detail.type, id: detail.id, band_id: detail.band_id }],
+      })
+      const added = res.tracks.filter((t) => !before.has(t.id))
+      const rest = res.tracks.filter((t) => before.has(t.id))
+      const reordered = [...rest.slice(0, index), ...added, ...rest.slice(index)]
+
+      onTracksChange(reordered)
+      onPlaylistChange({ ...playlist, track_count: reordered.length })
+      await api.reorderTracks(playlist.id, reordered.map((t) => t.id))
+    } catch (err) {
+      setError((err as Error).message)
+    }
+  }, [playlist, tracks, onPlaylistChange, onTracksChange])
 
   const reorder = useCallback(async (next: Track[]) => {
     // Show the new order immediately; reconcile with the server afterwards.
@@ -314,9 +340,13 @@ export function PlaylistView({
     } : t)))
   }, [playerAnalysis, tracks, onTracksChange])
 
-  /** Analyses each selected track in turn, recording tempo and key. */
-  const analyzeSelected = useCallback(async () => {
-    const queue = tracks.filter((t) => selected.has(t.id) && t.bc_band_id)
+  /**
+   * Analyses a queue of tracks in turn, recording tempo and key. Shared by
+   * every bulk-analysis entry point (selection, missing-only, and forced
+   * re-analysis of everything) — they differ only in which tracks go in and
+   * whether a cached result is trusted.
+   */
+  const runAnalysis = useCallback(async (queue: Track[], opts: { force?: boolean } = {}) => {
     if (queue.length === 0) return
 
     setAnalyzing({ done: 0, total: queue.length })
@@ -331,7 +361,7 @@ export function PlaylistView({
       try {
         // analyzeTrack publishes to the shared cache; the detection comes back
         // as detected_bpm and never overwrites a manual override.
-        const result = await analyzeTrack(track.bc_track_id, track.bc_band_id!)
+        const result = await analyzeTrack(track.bc_track_id, track.bc_band_id!, { force: opts.force })
         results.set(track.id, {
           bpm: result.tempo.bpm > 0 ? result.tempo.bpm : null,
           camelot: result.key?.camelot ?? '',
@@ -355,7 +385,25 @@ export function PlaylistView({
       setError(`Could not analyse ${failures} of ${queue.length} track${queue.length === 1 ? '' : 's'}.`)
     }
     setAnalyzing(null)
-  }, [tracks, selected, playlist.id, onTracksChange])
+  }, [onTracksChange])
+
+  const analyzeSelected = useCallback(() => (
+    runAnalysis(tracks.filter((t) => selected.has(t.id) && t.bc_band_id))
+  ), [tracks, selected, runAnalysis])
+
+  const tracksMissingAnalysis = useMemo(
+    () => tracks.filter((t) => t.bc_band_id && t.detected_bpm == null && !t.key_camelot),
+    [tracks],
+  )
+
+  /** Analyses only tracks with no tempo/key showing yet. */
+  const analyzeMissing = useCallback(() => runAnalysis(tracksMissingAnalysis), [tracksMissingAnalysis, runAnalysis])
+
+  /** Re-analyses every track, ignoring whatever is already cached or shown —
+   *  for when the detector itself has improved and old results are stale. */
+  const analyzeAll = useCallback(() => (
+    runAnalysis(tracks.filter((t) => t.bc_band_id), { force: true })
+  ), [tracks, runAnalysis])
 
   /**
    * Recomputes one track's analysis, ignoring any cached result. Tempo and key
@@ -417,6 +465,15 @@ export function PlaylistView({
     try {
       await api.updateTrack(playlist.id, track.id, { bpm })
       onTracksChange((prev) => prev.map((t) => (t.id === track.id ? { ...t, bpm } : t)))
+    } catch (e) {
+      setError((e as Error).message)
+    }
+  }, [playlist.id, onTracksChange])
+
+  const saveNote = useCallback(async (track: Track, note: string) => {
+    try {
+      await api.updateTrack(playlist.id, track.id, { note })
+      onTracksChange((prev) => prev.map((t) => (t.id === track.id ? { ...t, note } : t)))
     } catch (e) {
       setError((e as Error).message)
     }
@@ -497,6 +554,44 @@ export function PlaylistView({
         <button onClick={() => setShowWishlist(true)}>
           <Icon name="heart" size={14} /> Wishlist{wishlistCache.fan ? `: ${wishlistCache.fan.username}` : ''}
         </button>
+
+        {canEdit && (
+          <div className="dropdown">
+            <button
+              onClick={() => void analyzeMissing()}
+              disabled={bulkBusy || analyzing !== null || tracksMissingAnalysis.length === 0}
+              title="Detect tempo and key for tracks that don't have them yet"
+            >
+              {analyzing
+                ? <><div className="spin" /> Analysing {analyzing.done}/{analyzing.total}</>
+                : <><Icon name="activity" size={14} /> Analyze missing{tracksMissingAnalysis.length > 0 ? ` (${tracksMissingAnalysis.length})` : ''}</>}
+            </button>
+            <button
+              className="ghost icon"
+              onClick={() => setShowAnalyzeMenu((v) => !v)}
+              disabled={bulkBusy || analyzing !== null}
+              aria-haspopup="menu"
+              aria-expanded={showAnalyzeMenu}
+              aria-label="More analysis options"
+            >
+              <Icon name="chevron-down" size={13} />
+            </button>
+
+            {showAnalyzeMenu && (
+              <>
+                <div className="dropdown-scrim" onClick={() => setShowAnalyzeMenu(false)} role="presentation" />
+                <div className="dropdown-menu" role="menu">
+                  <button
+                    role="menuitem"
+                    onClick={() => { setShowAnalyzeMenu(false); void analyzeAll() }}
+                  >
+                    Analyze all tracks, ignoring existing results
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
 
         {contributors.length > 1 && (
           <div className="dropdown">
@@ -666,6 +761,10 @@ export function PlaylistView({
           // Reordering a filtered subset would renumber only the visible rows
           // and scramble the hidden ones, so it is turned off while filtering.
           disabled={!canEdit || reordering}
+          // Same restriction as reordering: the dropped-at index is a position
+          // in the visible list, which only lines up with the real order when
+          // that list is not filtered or resorted.
+          onDropExternal={canEdit && !reordering ? addUrlAt : undefined}
           renderItem={(track, { index, dragging, handle }) => (
             <TrackRow
               track={track}
@@ -690,6 +789,7 @@ export function PlaylistView({
               onRemove={() => removeTrack(track)}
               onSaveBpm={(v) => saveBpm(track, v)}
               onSaveKey={(code) => saveKey(track, code)}
+              onSaveNote={(note) => saveNote(track, note)}
               onReanalyze={track.bc_band_id ? () => reanalyzeTrack(track) : undefined}
               analyzing={analyzingRows.has(track.id)}
               contributorMenu={{
@@ -721,7 +821,6 @@ export function PlaylistView({
         <AddTracks
           onClose={() => setShowAdd(false)}
           onAdd={addRefs}
-          onAddUrl={addUrl}
         />
       )}
 
@@ -738,6 +837,7 @@ export function PlaylistView({
       {showWishlist && (
         <WishlistSidebar
           canEdit={canEdit}
+          currentPlaylistId={playlist.id}
           cache={wishlistCache}
           onCacheChange={setWishlistCache}
           onClose={() => setShowWishlist(false)}

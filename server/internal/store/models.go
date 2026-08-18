@@ -75,6 +75,8 @@ type Track struct {
 	BPM        *float64  `json:"bpm"`
 	// Camelot code entered by hand, or empty to use what analysis found.
 	KeyOverride string   `json:"key_override"`
+	// Free-text, hand-entered; empty when nobody has written one.
+	Note       string    `json:"note"`
 	ArtID      *int64    `json:"art_id"`
 	TrackURL   string    `json:"track_url"`
 	AddedBy    *int64    `json:"added_by"`

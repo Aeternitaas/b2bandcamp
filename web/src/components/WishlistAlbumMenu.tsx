@@ -85,6 +85,12 @@ export function WishlistAlbumMenu({ item, canEdit, added, busy, onAddAlbum, onAd
           )}
           {error && <div className="notice error">{error}</div>}
 
+          {detail?.genres && detail.genres.length > 0 && (
+            <div className="row wrap" style={{ gap: 4, padding: '0 2px 4px' }}>
+              {detail.genres.map((g) => <span className="badge" key={g}>{g}</span>)}
+            </div>
+          )}
+
           {detail && (
             <div className="popover-tracks">
               {detail.tracks.map((t) => {

@@ -107,6 +107,40 @@ type Tralbum struct {
 	About       string   `json:"about,omitempty"`
 	ReleaseDate string   `json:"release_date,omitempty"`
 	Tracks      []*Track `json:"tracks"`
+	// Up to 3 of this release's tags that are also one of Bandcamp's own
+	// established genres — most tags are freeform (a mood, a scene, a city)
+	// and would be noise here, so anything not in that fixed list is dropped.
+	Genres []string `json:"genres,omitempty"`
+}
+
+// bandcampGenres is Bandcamp's own fixed genre taxonomy (bandcamp.com/discover),
+// keyed by the normalised tag name their API reports. It changes rarely enough
+// that hand-listing it is simpler than an extra request to keep it fresh.
+var bandcampGenres = map[string]string{
+	"acoustic": "Acoustic", "alternative": "Alternative", "ambient": "Ambient",
+	"audiobooks": "Audiobooks", "blues": "Blues", "classical": "Classical",
+	"comedy": "Comedy", "country": "Country", "devotional": "Devotional",
+	"electronic": "Electronic", "experimental": "Experimental", "folk": "Folk",
+	"funk": "Funk", "hip-hop-rap": "Hip-Hop/Rap", "jazz": "Jazz", "kids": "Kids",
+	"latin": "Latin", "metal": "Metal", "podcasts": "Podcasts", "pop": "Pop",
+	"punk": "Punk", "r-b-soul": "R&B/Soul", "reggae": "Reggae", "rock": "Rock",
+	"soundtrack": "Soundtrack", "spoken-word": "Spoken Word", "world": "World",
+}
+
+// genresFromTags keeps only the tags that match one of Bandcamp's own
+// established genres (locations and freeform mood/scene tags are dropped),
+// in the order Bandcamp returned them, capped at 3.
+func genresFromTags(normNames []string) []string {
+	var out []string
+	for _, n := range normNames {
+		if label, ok := bandcampGenres[n]; ok {
+			out = append(out, label)
+			if len(out) == 3 {
+				break
+			}
+		}
+	}
+	return out
 }
 
 type WishlistItem struct {
@@ -349,6 +383,9 @@ func (c *Client) Details(ctx context.Context, itemType string, itemID, bandID in
 			Name    string `json:"name"`
 			ImageID int64  `json:"image_id"`
 		} `json:"band"`
+		Tags []struct {
+			NormName string `json:"norm_name"`
+		} `json:"tags"`
 		Tracks []struct {
 			TrackID      int64             `json:"track_id"`
 			Title        string            `json:"title"`
@@ -390,6 +427,11 @@ func (c *Client) Details(ctx context.Context, itemType string, itemID, bandID in
 	if raw.ArtID != nil {
 		t.ArtURL = ArtURL(*raw.ArtID, 9)
 	}
+	tagNames := make([]string, len(raw.Tags))
+	for i, tag := range raw.Tags {
+		tagNames[i] = tag.NormName
+	}
+	t.Genres = genresFromTags(tagNames)
 
 	for _, rt := range raw.Tracks {
 		tr := &Track{

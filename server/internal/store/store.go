@@ -206,6 +206,13 @@ UPDATE playlist_tracks t
  WHERE t.bpm IS NOT NULL
    AND ((a.bpm IS NOT NULL AND ABS(t.bpm - a.bpm) < 0.05)
         OR t.bpm <> ROUND(t.bpm))`},
+
+	// A free-text note on a playlist entry — "great intro", "needs a re-edit",
+	// whatever is worth remembering about that row. Purely additive: existing
+	// rows just get NULL, read back as an empty string.
+	{"013_track_note", `
+ALTER TABLE playlist_tracks
+  ADD COLUMN note VARCHAR(280) NULL AFTER key_override`},
 }
 
 func (s *Store) migrate(ctx context.Context) error {

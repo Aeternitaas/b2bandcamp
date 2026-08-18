@@ -3,9 +3,10 @@ import { BpmCell } from './BpmCell'
 import { ContributorMenu } from './ContributorMenu'
 import { Icon } from './Icon'
 import { KeyCell } from './KeyCell'
+import { NoteCell } from './NoteCell'
 import { useRowGestures } from '../hooks/useRowGestures'
 import { artUrl, formatAddedAgo, formatDuration } from '../utils'
-import type { ColumnConfig } from './trackColumns'
+import type { ColumnConfig } from './TrackColumns'
 import type { HandleProps } from './SortableList'
 import type { Collaborator, Track } from '../types'
 
@@ -32,6 +33,7 @@ interface Props {
   onRemove: () => void
   onSaveBpm: (bpm: number | null) => Promise<void>
   onSaveKey: (camelot: string) => Promise<void>
+  onSaveNote: (note: string) => Promise<void>
   onReanalyze?: () => Promise<void>
   analyzing?: boolean
   contributorMenu: {
@@ -56,7 +58,7 @@ export function TrackRow(props: Props) {
     track, number, columns, gridTemplate, compact, canEdit, selected, selecting,
     isCurrent, isPlaying, dragging, showHandle, showCheckbox, handle,
     effectiveBpm, effectiveKey, busy, onPlay, onToggleSelect, onRemove,
-    onSaveBpm, onSaveKey, onReanalyze, analyzing, contributorMenu,
+    onSaveBpm, onSaveKey, onSaveNote, onReanalyze, analyzing, contributorMenu,
   } = props
 
   // On touch devices a hold starts selection; once selecting, a tap toggles
@@ -90,6 +92,9 @@ export function TrackRow(props: Props) {
       editable={canEdit}
       onSave={onSaveKey}
     />
+  )
+  const noteCell = (
+    <NoteCell key="notes" note={track.note} editable={canEdit} onSave={onSaveNote} />
   )
   const contributor = (
     <ContributorMenu
@@ -212,6 +217,9 @@ export function TrackRow(props: Props) {
               if (c.key === 'addedOn') {
                 return <span className="meta-chip faint" key="addedOn">{formatAddedAgo(track.added_at)}</span>
               }
+              if (c.key === 'notes' && (track.note || canEdit)) {
+                return <span className="meta-chip" key="notes">{noteCell}</span>
+              }
               return null
             })}
           </span>
@@ -291,6 +299,7 @@ export function TrackRow(props: Props) {
         if (c.key === 'bpm') return bpmCell
         if (c.key === 'key') return keyCell
         if (c.key === 'duration') return <div className="track-dur" key="duration">{formatDuration(track.duration)}</div>
+        if (c.key === 'notes') return noteCell
         if (c.key === 'addedOn') {
           return (
             <div className="track-dur" key="addedOn" title={new Date(track.added_at).toLocaleString()}>

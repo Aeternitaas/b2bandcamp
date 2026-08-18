@@ -21,6 +21,13 @@ interface Props<T> {
    * as a contiguous block, which is what "move these three together" means.
    */
   selectedKeys?: Set<string | number>
+  /**
+   * Handles something dropped in from outside the list — a link dragged in
+   * from the browser's address bar or another tab — at the position it was
+   * dropped, reusing the same "which row's midpoint did this cross" logic
+   * that dragging an existing row to reorder it already relies on.
+   */
+  onDropExternal?: (index: number, e: React.DragEvent) => void
 }
 
 /**
@@ -33,10 +40,11 @@ interface Props<T> {
  * handle provide a non-pointer path to the same operation.
  */
 export function SortableList<T>({
-  items, keyOf, onReorder, renderItem, disabled, selectedKeys,
+  items, keyOf, onReorder, renderItem, disabled, selectedKeys, onDropExternal,
 }: Props<T>) {
   const [order, setOrder] = useState(items)
   const [dragIndex, setDragIndex] = useState(-1)
+  const [externalDragOver, setExternalDragOver] = useState(false)
 
   const containerRef = useRef<HTMLDivElement>(null)
   const orderRef = useRef(order)
@@ -146,7 +154,18 @@ export function SortableList<T>({
   }, [disabled, onReorder])
 
   return (
-    <div ref={containerRef} className="track-list">
+    <div
+      ref={containerRef}
+      className={`track-list${externalDragOver ? ' drop-target' : ''}`}
+      onDragOver={onDropExternal && ((e) => { e.preventDefault(); setExternalDragOver(true) })}
+      onDragLeave={onDropExternal && (() => setExternalDragOver(false))}
+      onDrop={onDropExternal && ((e) => {
+        e.preventDefault()
+        setExternalDragOver(false)
+        const index = indexAt(e.clientY)
+        onDropExternal(index === -1 ? order.length : index, e)
+      })}
+    >
       {order.map((item, index) => (
         <div key={keyOf(item)}>
           {renderItem(item, {

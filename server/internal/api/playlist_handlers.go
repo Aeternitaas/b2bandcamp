@@ -324,7 +324,7 @@ func (s *Server) handleUpdateTrack(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for field := range raw {
-		if field != "bpm" && field != "key_override" && field != "added_by" {
+		if field != "bpm" && field != "key_override" && field != "added_by" && field != "note" {
 			writeErr(w, http.StatusBadRequest, "unknown field "+field)
 			return
 		}
@@ -362,6 +362,22 @@ func (s *Server) handleUpdateTrack(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if err := s.st.SetTrackKey(r.Context(), p.ID, trackRowID, code); err != nil {
+			fail(w, err)
+			return
+		}
+	}
+
+	if value, present := raw["note"]; present {
+		var note *string
+		if err := json.Unmarshal(value, &note); err != nil {
+			writeErr(w, http.StatusBadRequest, "note must be a string or null")
+			return
+		}
+		text := ""
+		if note != nil {
+			text = trimTo(*note, 280)
+		}
+		if err := s.st.SetTrackNote(r.Context(), p.ID, trackRowID, text); err != nil {
 			fail(w, err)
 			return
 		}

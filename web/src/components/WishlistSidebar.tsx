@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
 import { api } from '../api'
-import { TralbumPanel } from './TralbumPanel'
+import { AddToPlaylistButton } from './AddToPlaylistButton'
 import { WishlistAlbumMenu } from './WishlistAlbumMenu'
+import { WishlistAlbumTracks } from './WishlistAlbumTracks'
 import { usePreview } from '../audio/usePreview'
 import { useAuth } from '../state/auth'
-import type { Fan, TrackRef, WishlistItem } from '../types'
+import type { Fan, Playlist, TrackRef, WishlistItem } from '../types'
 import { Icon } from './Icon'
 
 /** Everything about the last-loaded wishlist, held by the parent so it
@@ -22,25 +23,49 @@ export const EMPTY_WISHLIST_CACHE: WishlistCache = { fan: null, items: [], token
 
 interface Props {
   canEdit: boolean
+  /** So "add to another playlist" can leave the currently open one out of
+   *  its own list of options. */
+  currentPlaylistId: number
   cache: WishlistCache
   onCacheChange: Dispatch<SetStateAction<WishlistCache>>
   onClose: () => void
   onAdd: (refs: TrackRef[]) => Promise<void>
 }
 
-type Expanded = { type: 'a' | 't'; id: number; bandId: number; title: string }
-
 /**
  * Browse any Bandcamp user's wishlist and pull releases into the playlist.
- * Albums can be added whole, or opened to pick individual songs.
+ * Albums can be added whole, or expanded in place to pick individual songs.
  */
-export function WishlistSidebar({ canEdit, cache, onCacheChange, onClose, onAdd }: Props) {
+export function WishlistSidebar({ canEdit, currentPlaylistId, cache, onCacheChange, onClose, onAdd }: Props) {
   const { fan, items, token, more } = cache
+  // Other playlists this item could go to instead of (or as well as) the one
+  // that is open. Fetched once — the "+" next to each item covers the open
+  // playlist already, this is only for sending a copy somewhere else.
+  const [otherPlaylists, setOtherPlaylists] = useState<Playlist[]>([])
+  useEffect(() => {
+    api.listPlaylists()
+      .then((res) => setOtherPlaylists(res.playlists.filter((p) => (
+        p.id !== currentPlaylistId && (p.role === 'owner' || p.role === 'collaborator')
+      ))))
+      .catch(() => {}) // the extra button just won't have anywhere to offer
+  }, [currentPlaylistId])
+
+  const addToOtherPlaylist = useCallback(async (playlistId: number, refs: TrackRef[]) => {
+    await api.addTracks(playlistId, { items: refs })
+  }, [])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [expanded, setExpanded] = useState<Expanded | null>(null)
+  // Which wishlisted album is showing its track list inline, right under its
+  // own row — an accordion, not a navigation, so the list underneath it never
+  // unmounts and its scroll position survives opening one.
+  const [expandedAlbum, setExpandedAlbum] = useState<number | null>(null)
   const [busy, setBusy] = useState<number | null>(null)
   const [added, setAdded] = useState<Set<number>>(new Set())
+  // What the currently loaded preview came from, so the row it was pressed
+  // from can be highlighted. Re-checked against the live player on every
+  // render (via preview.isPreviewing) rather than trusted on its own, so a
+  // stale entry here never shows a highlight nothing is actually playing.
+  const [previewSource, setPreviewSource] = useState<{ type: 'a' | 't'; id: number; trackId: number } | null>(null)
 
   const [input, setInput] = useState(fan?.username ?? '')
   const [autoTried, setAutoTried] = useState(false)
@@ -126,6 +151,7 @@ export function WishlistSidebar({ canEdit, cache, onCacheChange, onClose, onAdd 
           artist: item.band_name,
           trackUrl: item.item_url,
         })
+        setPreviewSource({ type: 't', id: item.tralbum_id, trackId: item.tralbum_id })
         return
       }
 
@@ -146,17 +172,25 @@ export function WishlistSidebar({ canEdit, cache, onCacheChange, onClose, onAdd 
         duration: first.duration,
         trackUrl: first.track_url,
       })
+      setPreviewSource({ type: 'a', id: item.tralbum_id, trackId: first.track_id })
     } catch (e) {
       setError((e as Error).message)
     }
   }
+
+  /** True while the last thing pressed from this row is what is actually
+   *  loaded in the player right now. */
+  const isRowPlaying = (type: 'a' | 't', id: number) => (
+    !!previewSource && previewSource.type === type && previewSource.id === id
+    && preview.isPreviewing(previewSource.trackId)
+  )
 
   const clearFan = () => {
     onCacheChange({ fan: null, items: [], token: '', more: false })
     // Prefill with the linked account rather than clearing to nothing, so the
     // usual next action is one click.
     setInput(linked)
-    setExpanded(null)
+    setExpandedAlbum(null)
   }
 
   // Leaving the panel ends any preview it started; a half-heard track playing
@@ -173,12 +207,12 @@ export function WishlistSidebar({ canEdit, cache, onCacheChange, onClose, onAdd 
       <aside className="sidebar" aria-label="Bandcamp wishlist">
         <div className="sidebar-head">
           <h2 className="truncate" style={{ flex: 1 }}>
-            {expanded ? expanded.title : fan ? `${fan.username}'s wishlist` : 'Browse a wishlist'}
+            {fan ? `${fan.username}'s wishlist` : 'Browse a wishlist'}
           </h2>
-          {fan && !expanded && (
+          {fan && (
             <>
               <button
-                className="ghost icon"
+                className="icon"
                 onClick={reload}
                 disabled={loading}
                 aria-label={`Reload ${fan.username}'s wishlist`}
@@ -186,25 +220,16 @@ export function WishlistSidebar({ canEdit, cache, onCacheChange, onClose, onAdd 
               >
                 <Icon name="rotate-ccw" size={13} />
               </button>
-              <button className="ghost icon" onClick={clearFan} aria-label="Choose a different user">
+              <button className="icon" onClick={clearFan} aria-label="Choose a different user">
                 change
               </button>
             </>
           )}
-          <button className="ghost icon" onClick={close} aria-label="Close wishlist"><Icon name="x" /></button>
+          <button className="icon" onClick={close} aria-label="Close wishlist"><Icon name="x" /></button>
         </div>
 
         <div className="sidebar-body">
-          {expanded ? (
-            <TralbumPanel
-              type={expanded.type}
-              id={expanded.id}
-              bandId={expanded.bandId}
-              onAdd={onAdd}
-              onBack={() => setExpanded(null)}
-            />
-          ) : (
-            <div className="col">
+          <div className="col">
               {!fan && (
                 <div className="col" style={{ gap: 8 }}>
                   <div className="field">
@@ -264,73 +289,96 @@ export function WishlistSidebar({ canEdit, cache, onCacheChange, onClose, onAdd 
 
               {items.map((item) => {
                 const isAdded = added.has(item.tralbum_id)
+                const isAlbum = item.tralbum_type === 'a'
+                const isOpen = isAlbum && expandedAlbum === item.tralbum_id
                 return (
-                  <div className="wish-item" key={`${item.tralbum_type}-${item.tralbum_id}`}>
-                    <button
-                      className="wish-art"
-                      onClick={() => previewItem(item)}
-                      aria-label={`Preview ${item.title}`}
-                      title="Preview — press again to skip ahead"
-                    >
-                      {item.art_url
-                        ? <img src={item.art_url} alt="" loading="lazy" />
-                        : <Icon name="music" size={18} />}
-                      <span className="popover-art-overlay">
-                        <Icon name="play" size={12} />
-                      </span>
-                    </button>
-
-                    <button
-                      className="track-meta ghost"
-                      style={{ justifyContent: 'flex-start', textAlign: 'left', padding: 0, minHeight: 0 }}
-                      onClick={() => setExpanded({
-                        type: item.tralbum_type,
-                        id: item.tralbum_id,
-                        bandId: item.band_id,
-                        title: item.title,
-                      })}
-                    >
-                      <span style={{ minWidth: 0 }}>
-                        <span className="track-title truncate" style={{ display: 'block' }}>{item.title}</span>
-                        <span className="track-sub truncate" style={{ display: 'block' }}>
-                          {item.band_name}
-                          {item.tralbum_type === 'a' ? ` · ${item.track_count} tracks` : ' · track'}
+                  <div key={`${item.tralbum_type}-${item.tralbum_id}`}>
+                    <div className={`wish-item${isRowPlaying(item.tralbum_type, item.tralbum_id) ? ' playing' : ''}`}>
+                      <button
+                        className="wish-art"
+                        onClick={() => previewItem(item)}
+                        aria-label={`Preview ${item.title}`}
+                        title="Preview — press again to skip ahead"
+                      >
+                        {item.art_url
+                          ? <img src={item.art_url} alt="" loading="lazy" />
+                          : <Icon name="music" size={18} />}
+                        <span className="popover-art-overlay">
+                          <Icon name="play" size={12} />
                         </span>
-                      </span>
-                    </button>
+                      </button>
 
-                    <a
-                      className="ghost icon"
-                      href={item.item_url}
-                      target="_blank"
-                      rel="noreferrer noopener"
-                      aria-label={`Open ${item.title} on Bandcamp`}
-                      style={{ display: 'inline-flex', alignItems: 'center', padding: '6px 8px' }}
-                    >
-                      <Icon name="external-link" size={13} />
-                    </a>
+                      <button
+                        className="track-meta ghost"
+                        style={{ justifyContent: 'flex-start', textAlign: 'left', padding: 0, minHeight: 0 }}
+                        onClick={() => (isAlbum
+                          ? setExpandedAlbum((id) => (id === item.tralbum_id ? null : item.tralbum_id))
+                          : previewItem(item))}
+                        aria-expanded={isAlbum ? isOpen : undefined}
+                      >
+                        <span style={{ minWidth: 0 }}>
+                          <span className="track-title truncate" style={{ display: 'block' }}>{item.title}</span>
+                          <span className="track-sub truncate" style={{ display: 'block' }}>
+                            {item.band_name}
+                            {isAlbum ? ` · ${item.track_count} tracks` : ' · track'}
+                          </span>
+                        </span>
+                        {isAlbum && (
+                          <Icon name="chevron-down" size={13} className={isOpen ? 'flip-v' : undefined} />
+                        )}
+                      </button>
 
-                    {item.tralbum_type === 'a' ? (
-                      <WishlistAlbumMenu
+                      <a
+                        className="ghost icon"
+                        href={item.item_url}
+                        target="_blank"
+                        rel="noreferrer noopener"
+                        aria-label={`Open ${item.title} on Bandcamp`}
+                        style={{ display: 'inline-flex', alignItems: 'center', padding: '6px 8px' }}
+                      >
+                        <Icon name="external-link" size={13} />
+                      </a>
+
+                      {isAlbum ? (
+                        <WishlistAlbumMenu
+                          item={item}
+                          canEdit={canEdit}
+                          added={isAdded}
+                          busy={busy === item.tralbum_id}
+                          onAddAlbum={() => addWhole(item)}
+                          onAddTrack={(ref) => onAdd([ref])}
+                        />
+                      ) : (
+                        <button
+                          className={isAdded ? 'ghost icon' : 'icon'}
+                          disabled={!canEdit || busy !== null || isAdded}
+                          onClick={() => addWhole(item)}
+                          aria-label={`Add ${item.title}`}
+                          title="Add track"
+                        >
+                          {busy === item.tralbum_id
+                            ? <div className="spin" />
+                            : <Icon name={isAdded ? 'check' : 'plus'} />}
+                        </button>
+                      )}
+
+                      <AddToPlaylistButton
+                        playlists={otherPlaylists}
+                        disabled={busy !== null}
+                        label={item.title}
+                        onAdd={(playlistId) => addToOtherPlaylist(playlistId,
+                          [{ type: item.tralbum_type, id: item.tralbum_id, band_id: item.band_id }])}
+                      />
+                    </div>
+
+                    {isOpen && (
+                      <WishlistAlbumTracks
                         item={item}
                         canEdit={canEdit}
-                        added={isAdded}
-                        busy={busy === item.tralbum_id}
-                        onAddAlbum={() => addWhole(item)}
-                        onAddTrack={(ref) => onAdd([ref])}
+                        preview={preview}
+                        onTrackPreviewed={(trackId) => setPreviewSource({ type: 'a', id: item.tralbum_id, trackId })}
+                        onAdd={onAdd}
                       />
-                    ) : (
-                      <button
-                        className={isAdded ? 'ghost icon' : 'icon'}
-                        disabled={!canEdit || busy !== null || isAdded}
-                        onClick={() => addWhole(item)}
-                        aria-label={`Add ${item.title}`}
-                        title="Add track"
-                      >
-                        {busy === item.tralbum_id
-                          ? <div className="spin" />
-                          : <Icon name={isAdded ? 'check' : 'plus'} />}
-                      </button>
                     )}
                   </div>
                 )
@@ -341,8 +389,7 @@ export function WishlistSidebar({ canEdit, cache, onCacheChange, onClose, onAdd 
               {more && !loading && fan && (
                 <button onClick={() => loadPage(fan.fan_id, token, false)}>Load more</button>
               )}
-            </div>
-          )}
+          </div>
         </div>
       </aside>
     </>

@@ -295,6 +295,7 @@ button.icon { min-height: 36px; padding: 6px 8px; }
 /* ---------- track rows ---------- */
 
 .track-list { display: flex; flex-direction: column; }
+.track-list.drop-target { outline: 2px dashed var(--accent); outline-offset: -2px; border-radius: var(--radius); }
 
 .track-row {
   display: flex;
@@ -391,12 +392,26 @@ button.icon { min-height: 36px; padding: 6px 8px; }
 @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
 
 .wish-item {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 8px 0;
   border-bottom: 1px solid var(--border);
 }
+.wish-item.playing { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+
+/* The album's own track list, expanded inline right under its row rather
+   than in a floating popover or a separate view. */
+.wish-album-tracks {
+  margin: 0 0 6px 30px;
+  padding: 6px 0 6px 10px;
+  border-left: 2px solid var(--border);
+}
+/* The inner .popover-tracks list is already its own scroll region — this
+   just gives it a bit more room to work with than the floating popover
+   version needs. */
+.wish-album-tracks .popover-tracks { max-height: 340px; }
 
 /* ---------- search results ---------- */
 
@@ -750,8 +765,14 @@ input[type='checkbox'] { width: auto; height: auto; }
 
 /* ---------- add-choice popover (wishlist albums) ---------- */
 
-.add-choice { position: relative; display: flex; align-items: center; }
+.add-choice { display: flex; align-items: center; }
 
+/* Positioned relative to the whole row (.wish-item), not this small trigger:
+   the trigger sits near the row's right edge, and anchoring to it directly
+   left almost no room to grow into on a long title, pushing the popover's
+   left edge past the sidebar's own. Anchoring to the row instead gives it
+   nearly the full row width to grow leftward into, regardless of where in
+   that row the trigger itself lands. */
 .add-choice-popover {
   display: none;
   flex-direction: column;
@@ -879,6 +900,28 @@ input[type='checkbox'] { width: auto; height: auto; }
   font-variant-numeric: tabular-nums;
 }
 
+.note-cell {
+  min-height: 30px;
+  padding: 2px 6px;
+  width: 100%;
+  justify-content: flex-start;
+  background: none;
+  border: 1px solid transparent;
+  color: var(--dim);
+  font-size: 12px;
+  text-align: left;
+}
+.note-cell:hover:not(:disabled) { background: var(--surface-2); border-color: var(--border); }
+.note-cell.empty { color: var(--faint); }
+.note-cell:disabled { opacity: 1; cursor: default; }
+
+.note-edit, .note-input {
+  width: 100%;
+  min-height: 30px;
+  padding: 2px 6px;
+  font-size: 12px;
+}
+
 .icon-svg.flip { transform: rotate(180deg); }
 
 /* ---------- selection + bulk actions ---------- */
@@ -937,6 +980,11 @@ input[type='checkbox'] { width: auto; height: auto; }
   border-radius: var(--radius);
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
 }
+
+/* For a trigger sitting near the right edge of its container (a wishlist
+   row's last button, say): grow the menu leftward from that edge instead of
+   rightward off it, which is what the plain left:0 anchor above would do. */
+.dropdown-menu.align-end { left: auto; right: 0; }
 
 /* ---------- inline analysis panel on the player ---------- */
 
