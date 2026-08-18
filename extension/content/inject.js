@@ -522,20 +522,19 @@
       :host { all: initial; }
       .b {
         width: 100%; height: 100%;
-        border-radius: 50%;
-        background: #14181d;
+        background: none;
+        border: none;
         color: #33c6e8;
-        border: 1px solid #33c6e8;
         display: flex;
         align-items: center;
         justify-content: center;
         cursor: pointer;
         font: 700 ${Math.round(size * 0.68)}px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-        box-shadow: 0 1px 4px rgba(0,0,0,.4);
+        text-shadow: 0 1px 3px rgba(0,0,0,.7);
         transition: transform .1s ease;
       }
       .b:hover { transform: scale(1.12); }
-      .b.done { color: #59d99b; border-color: #59d99b; }
+      .b.done { color: #59d99b; }
     `;
     sh.appendChild(style);
     const badge = document.createElement('div');
