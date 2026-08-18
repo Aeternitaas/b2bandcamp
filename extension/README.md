@@ -6,10 +6,13 @@ b2bandcamp playlists without leaving Bandcamp.
 
 ## Install (unpacked, not published to the Chrome Web Store)
 
-1. Go to `chrome://extensions`.
-2. Turn on **Developer mode** (top right).
-3. **Load unpacked** → select this `extension/` folder.
-4. Click the extension's icon in the toolbar.
+0. Download the latest version of the b2bandcamp Extension
+[here](https://github.com/Aeternitaas/b2bandcamp/releases). Move it somewhere
+convenient and unzip it.
+2. Go to `chrome://extensions`.
+3. Turn on **Developer mode** (top right).
+4. **Load unpacked** → select the unzipped folder.
+5. Click the extension's icon in the toolbar.
 
 ## Link it to your instance
 
