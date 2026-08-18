@@ -67,7 +67,7 @@ export function NoteCell({ note, editable, onSave }: Props) {
       disabled={!editable || busy}
       title={note || (editable ? 'Click to add a note' : undefined)}
     >
-      {busy ? <div className="spin" /> : (note ? <span className="truncate">{note}</span> : ', ')}
+      {busy ? <div className="spin" /> : (note ? <span className="truncate">{note}</span> : '- ')}
     </button>
   )
 }
