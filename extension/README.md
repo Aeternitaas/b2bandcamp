@@ -30,13 +30,18 @@ b2bandcamp playlists without leaving Bandcamp.
 
 ## Using it
 
-- **Album or track page:** a floating **+ Add to playlist** button appears.
-  Click it to preview the release (art, title, every track) and add the
-  whole thing or pick individual tracks, into whichever of your playlists
-  you choose from the dropdown.
+- **Album or track page:** a small **+** badge sits just left of the page's
+  own title, click it to preview the release (art, title, every track) and
+  add the whole thing or pick individual tracks. On an album, every row in
+  the track list also gets its own **+** to its left, for adding just that
+  one track without opening the release picker.
 - **Wishlist, discover, an artist's discography, or any page listing
-  releases:** a small **+** badge appears next to each album/track link.
-  Same picker, scoped to that one item.
+  releases:** a small **+** badge appears on each album/track link. Same
+  picker, scoped to that one item.
+- **Previewing an album's tracks:** clicking a track's cover art in the
+  picker plays a short preview, click again (or click another track's art)
+  to switch or stop it. Moving the pointer off the picker closes it and
+  stops playback.
 - Playlist choice is remembered between uses in the same browser, so adding
   several tracks in a row does not mean reselecting the target playlist
   each time.
@@ -51,10 +56,19 @@ address is a Bandcamp album or track page
 (`https://*.bandcamp.com/album/...` or `/track/...`). Everything else (art,
 title, artist, the full track list) comes from your b2bandcamp instance
 resolving that link, the same way pasting a link into the web app's "Add
-music" does.
+music" does. The one exception is an album's own track table, old, stable
+markup that a long list of Bandcamp tools already rely on, used only to
+place each row's badge, not to detect the track itself.
 
-All of the injected UI lives inside an isolated shadow DOM node appended to
-the page, it never modifies Bandcamp's own markup, so there is nothing here
+Each badge is planted directly next to the thing it marks (a cell in the
+track table, the release link itself elsewhere), rather than floated on top
+of it and tracked with polling, so it scrolls exactly with its row or tile
+and never lags behind. It still carries its own shadow root, so it is
+visually isolated from Bandcamp's styles either way.
+
+The add-to-playlist picker itself lives inside an isolated shadow DOM node
+appended to the page, it never modifies Bandcamp's own markup, so there is
+nothing here
 that can break the page under it.
 
 ## Architecture, briefly

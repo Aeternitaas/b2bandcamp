@@ -172,6 +172,15 @@ const handlers = {
       method: 'POST',
       body: JSON.stringify({ items: [{ type, id, band_id: bandId }] })
     });
+  },
+
+  /** The stream endpoint needs no auth (see docs/API.md), so the content
+   *  script can point an <audio> element at it directly, this just hands
+   *  back the full URL, no fetch, since only the instance URL is secret. */
+  async streamUrl({ trackId, bandId }) {
+    const link = await getLink();
+    if (!link) throw new Error('Not linked to a b2bandcamp instance yet.');
+    return `${link.instanceUrl}/api/bc/stream/${trackId}?band_id=${bandId}`;
   }
 };
 
