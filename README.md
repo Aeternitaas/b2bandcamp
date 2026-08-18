@@ -3,9 +3,11 @@
 Self-hosted Bandcamp playlists. Collect tracks from across Bandcamp into your
 own playlists, reorder them, and share them with a link that lets other people
 edit alongside you.
-
-<img width="1065" height="476" alt="image" src="https://github.com/user-attachments/assets/2c2e6e88-32b1-444e-b824-cc730c977858" />
-
+<br>
+<br>
+<div align="center"><img width="852" height="380" alt="image" src="https://github.com/user-attachments/assets/2c2e6e88-32b1-444e-b824-cc730c977858" /></div>
+<br>
+<br>
 Playlists are entirely local to this app and it does not use, read, or write
 Bandcamp's own playlist features.
 
@@ -19,8 +21,8 @@ Bandcamp's own playlist features.
 
 ```bash
 cp .env.example .env
-cp docker-compose-prod.yml docker-compose.yml
-$EDITOR .env          # set MYSQL_ROOT_PASSWORD and MYSQL_PASSWORD
+cp docker-compose.prod.yml docker-compose.yml
+$EDITOR .env          # set MYSQL_ROOT_PASSWORD and MYSQL_PASSWORD -- I suggest generating these with `openssl rand -hex 16`
 
 docker compose up -d --build
 ```
