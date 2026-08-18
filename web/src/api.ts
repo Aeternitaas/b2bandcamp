@@ -1,5 +1,5 @@
 import type {
-  AccountSummary, Collaborator, Fan, Playlist, SearchResult, Track, TrackRef,
+  AccountSummary, ApiToken, Collaborator, Fan, Playlist, SearchResult, Track, TrackRef,
   ShareLink, Tralbum, User, Visibility, WishlistPage,
 } from './types'
 
@@ -154,6 +154,12 @@ export const api = {
 
   deleteTrack: (playlistId: number, trackRowId: number) =>
     request<{ ok: boolean }>(`/api/playlists/${playlistId}/tracks/${trackRowId}`, { method: 'DELETE' }),
+
+  // ---- API tokens (browser extension, etc.) ----
+  listApiTokens: () => request<{ tokens: ApiToken[] }>('/api/account/tokens'),
+
+  revokeApiToken: (id: number) =>
+    request<{ ok: boolean }>(`/api/account/tokens/${id}`, { method: 'DELETE' }),
 
   // ---- sharing ----
   listShares: () => request<{ shares: ShareLink[] }>('/api/account/shares'),

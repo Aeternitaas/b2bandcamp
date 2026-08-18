@@ -213,6 +213,27 @@ UPDATE playlist_tracks t
 	{"013_track_note", `
 ALTER TABLE playlist_tracks
   ADD COLUMN note VARCHAR(280) NULL AFTER key_override`},
+
+	// Long-lived bearer tokens for API clients that cannot hold a browser
+	// session cookie — the Chrome extension, primarily. Mirrors sessions:
+	// only a hash is stored, so a database leak does not hand over a working
+	// credential. Unlike a session there is no expiry — a browser extension
+	// has nowhere convenient to prompt a re-login — so revocation is manual
+	// (DELETE /api/account/tokens/{id}) and last_used_at exists so a person
+	// can tell a stale token from one still in use before revoking it.
+	{"014_api_tokens", `
+CREATE TABLE IF NOT EXISTS api_tokens (
+  id           BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  user_id      BIGINT UNSIGNED NOT NULL,
+  token_hash   CHAR(64)        NOT NULL,
+  label        VARCHAR(100)    NOT NULL DEFAULT '',
+  created_at   DATETIME        NOT NULL,
+  last_used_at DATETIME        NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_api_tokens_hash (token_hash),
+  KEY idx_api_tokens_user (user_id),
+  CONSTRAINT fk_api_tokens_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`},
 }
 
 func (s *Store) migrate(ctx context.Context) error {

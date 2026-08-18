@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../api'
 import { useAuth } from '../state/auth'
+import { ApiTokens } from '../components/ApiTokens'
 import { Avatar } from '../components/Avatar'
 import { BandcampLink } from '../components/BandcampLink'
 import { ShareLinks } from '../components/ShareLinks'
@@ -94,6 +95,8 @@ export function SettingsPage() {
       <BandcampLink user={user} onChange={refresh} />
 
       <ShareLinks />
+
+      <ApiTokens />
 
       <form className="card col" onSubmit={submit}>
         <div className="field">

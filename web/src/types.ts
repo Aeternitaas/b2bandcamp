@@ -77,6 +77,15 @@ export interface Collaborator {
   added_at: string
 }
 
+/** A bearer credential for a non-browser client (the Chrome extension). The
+ *  raw token itself is never returned here — only once, at creation. */
+export interface ApiToken {
+  id: number
+  label: string
+  created_at: string
+  last_used_at: string | null
+}
+
 export interface SearchResult {
   type: 'b' | 'a' | 't' | 'f'
   id: number

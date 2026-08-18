@@ -1,0 +1,49 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>b2bandcamp</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <header>
+    <h1>b2bandcamp</h1>
+  </header>
+
+  <section id="linked-view" class="hidden">
+    <p class="status">
+      Connected to <strong id="linked-url"></strong>
+      <span id="linked-label" class="faint"></span>
+    </p>
+    <button id="open-instance" class="ghost">Open playlists</button>
+    <button id="sign-out" class="danger">Sign out</button>
+  </section>
+
+  <section id="connect-view">
+    <div id="step-instance">
+      <label for="instance-url">Your b2bandcamp instance</label>
+      <input id="instance-url" type="text" placeholder="https://b2b.example.com" autocomplete="off" />
+      <button id="connect-btn">Connect</button>
+    </div>
+
+    <div id="step-login" class="hidden">
+      <p class="status" id="connected-to"></p>
+      <label for="login-input">Username or email</label>
+      <input id="login-input" type="text" autocomplete="username" />
+      <label for="password-input">Password</label>
+      <input id="password-input" type="password" autocomplete="current-password" />
+      <button id="login-btn">Sign in</button>
+      <button id="back-btn" class="ghost">Back</button>
+    </div>
+  </section>
+
+  <p id="error" class="error hidden"></p>
+
+  <footer>
+    On any Bandcamp album, track, or wishlist page, look for the
+    <strong>+ Add to playlist</strong> button.
+  </footer>
+
+  <script src="popup.js"></script>
+</body>
+</html>

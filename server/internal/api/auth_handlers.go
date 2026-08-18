@@ -185,3 +185,103 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"user": u})
 }
+
+// handleCreateAPIToken issues a bearer token from a username/password, the
+// same credentials handleLogin accepts — this is the "log in" step for a
+// client that cannot hold a session cookie, principally the browser
+// extension. See docs/API.md for the full token lifecycle.
+func (s *Server) handleCreateAPIToken(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Login    string `json:"login"`
+		Password string `json:"password"`
+		Label    string `json:"label"`
+	}
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	req.Login = strings.TrimSpace(req.Login)
+	label := trimTo(req.Label, 100)
+	if label == "" {
+		label = "API token"
+	}
+
+	// Same limiter as the web login: this endpoint verifies a password too,
+	// so it needs the same brute-force protection.
+	if !loginLimiter.allow(s.clientIP(r)) {
+		writeErr(w, http.StatusTooManyRequests, "too many sign-in attempts, try again later")
+		return
+	}
+
+	u, hash, err := s.st.UserByLogin(r.Context(), req.Login)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			auth.DummyVerify(req.Password)
+			writeErr(w, http.StatusUnauthorized, "incorrect username or password")
+			return
+		}
+		fail(w, err)
+		return
+	}
+
+	ok, err := auth.VerifyPassword(req.Password, hash)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	if !ok {
+		writeErr(w, http.StatusUnauthorized, "incorrect username or password")
+		return
+	}
+
+	raw, err := auth.NewToken()
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	rec, err := s.st.CreateAPIToken(r.Context(), u.ID, auth.HashToken(raw), label)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+
+	// The only time the raw value is ever sent — it cannot be recovered
+	// after this response, only revoked and reissued.
+	writeJSON(w, http.StatusCreated, map[string]any{
+		"token": raw,
+		"id":    rec.ID,
+		"label": rec.Label,
+	})
+}
+
+// handleListAPITokens lists the caller's own tokens (never the raw value) so
+// an account page can show what is authorized and let a lost or unused one
+// be revoked.
+func (s *Server) handleListAPITokens(w http.ResponseWriter, r *http.Request) {
+	u := s.requireUser(w, r)
+	if u == nil {
+		return
+	}
+	list, err := s.st.ListAPITokens(r.Context(), u.ID)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"tokens": list})
+}
+
+func (s *Server) handleDeleteAPIToken(w http.ResponseWriter, r *http.Request) {
+	u := s.requireUser(w, r)
+	if u == nil {
+		return
+	}
+	id, ok := pathInt(r, "id")
+	if !ok {
+		writeErr(w, http.StatusBadRequest, "invalid token id")
+		return
+	}
+	if err := s.st.DeleteAPIToken(r.Context(), u.ID, id); err != nil {
+		fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}

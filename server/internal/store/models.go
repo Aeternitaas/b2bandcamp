@@ -15,6 +15,15 @@ type User struct {
 	AvatarURL        string `json:"avatar_url,omitempty"`
 }
 
+// APIToken is a bearer credential for non-browser clients (the Chrome
+// extension). The raw token is only ever returned once, at creation.
+type APIToken struct {
+	ID         int64      `json:"id"`
+	Label      string     `json:"label"`
+	CreatedAt  time.Time  `json:"created_at"`
+	LastUsedAt *time.Time `json:"last_used_at"`
+}
+
 // Visibility controls who may edit a playlist.
 //
 //	private — owner only; the share link is inert.
