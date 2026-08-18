@@ -1,12 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="b2bandcamp">
   <rect width="512" height="512" rx="112" fill="#0c0e11"/>
-  <!-- Stacked playlist lines with a cyan accent, echoing the app's list view -->
-  <g fill="#33c6e8">
-    <rect x="112" y="150" width="200" height="26" rx="13"/>
-    <rect x="112" y="214" width="150" height="26" rx="13" opacity="0.75"/>
-    <rect x="112" y="278" width="176" height="26" rx="13" opacity="0.5"/>
+  <!-- Feather Icons "music" (https://feathericons.com), MIT licensed —
+       unmodified path data, scaled up and recoloured to the app's accent. -->
+  <g transform="translate(256 256) scale(15) translate(-12 -12)"
+     fill="none" stroke="#33c6e8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M9 18V5l12-2v13"/>
+    <circle cx="6" cy="18" r="3"/>
+    <circle cx="18" cy="16" r="3"/>
   </g>
-  <!-- Play head / note -->
-  <circle cx="344" cy="336" r="54" fill="#33c6e8"/>
-  <rect x="380" y="150" width="22" height="192" rx="11" fill="#33c6e8"/>
 </svg>
