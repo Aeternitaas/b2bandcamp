@@ -481,6 +481,14 @@
   // ---------- release-link detection ----------
 
   function releaseHref(anchor) {
+    // A bare "#" (Bandcamp's inline player uses this as a placeholder before
+    // any track is loaded) resolves against the current page's own URL, an
+    // /album/ or /track/ page resolves right back to that same page, a false
+    // match for "this is a release link" that has nothing to do with the
+    // href actually pointing anywhere.
+    const raw = anchor.getAttribute('href');
+    if (!raw || raw === '#') return null;
+
     let url;
     try {
       url = new URL(anchor.href, location.href);
@@ -596,13 +604,63 @@
   }
 
   /**
-   * Everywhere else a release link turns up (Discover, a fan's wishlist, an
-   * artist's discography grid, a tag page): the badge is appended straight
-   * into the anchor itself, so it inherits the anchor's own position in the
-   * page and scrolls with it exactly, no tracking needed. Bandcamp's own
-   * client-rendered grids are unstable enough that this, anchoring to
-   * whatever element we already know encloses the release, is more robust
-   * than trying to name a specific "card" container for each layout.
+   * The "big player" widget every album/track page has (#trackInfo
+   * .inline_player), showing whatever track is currently loaded with a
+   * scrub bar. Its own title link is a legitimate thing to badge (it is not
+   * always the page's own release, the player advances to the album's next
+   * track), but appending into it the way attachInlineBadge does would land
+   * the badge on top of the title/scrub bar area, cramped and easy to
+   * mistake for part of the transport controls. This gives it a real table
+   * cell of its own, immediately to the right of the scrub bar, matching
+   * how decorateTrackTable avoids overlaying anything for the same reason.
+   *
+   * The title link starts as a bare "#" href with no track loaded, and
+   * Bandcamp swaps both its href and its text once playback starts (or
+   * skips tracks), so this keeps watching rather than running once.
+   */
+  function decorateInlinePlayer() {
+    const progCell = document.querySelector('.inline_player td.progbar_cell');
+    const titleLink = document.querySelector('.inline_player .title_link');
+    if (!progCell || !titleLink || progCell.dataset.b2bDone) return;
+    progCell.dataset.b2bDone = '1';
+    seen.add(titleLink);
+
+    const cell = document.createElement('td');
+    cell.style.cssText = 'width: 24px; padding: 0 0 0 6px; vertical-align: middle;';
+    progCell.after(cell);
+
+    let badgeHost = null;
+    let currentHref = null;
+    const sync = () => {
+      const href = releaseHref(titleLink);
+      if (href === currentHref) return;
+      currentHref = href;
+      badgeHost?.remove();
+      badgeHost = href ? makeBadge(href, 20) : null;
+      if (badgeHost) cell.appendChild(badgeHost);
+    };
+    sync();
+
+    const watch = titleLink.closest('.track_info') || titleLink.parentElement;
+    new MutationObserver(sync).observe(watch, { attributes: true, attributeFilter: ['href'], childList: true, subtree: true });
+  }
+
+  /**
+   * Everywhere else a release link turns up on a browsable grid (Discover, a
+   * fan's wishlist, an artist's discography, a tag page): the badge is
+   * appended straight into the anchor itself, so it inherits the anchor's
+   * own position in the page and scrolls with it exactly, no tracking
+   * needed. Bandcamp's own client-rendered grids are unstable enough that
+   * this, anchoring to whatever element we already know encloses the
+   * release, is more robust than trying to name a specific "card" container
+   * for each layout.
+   *
+   * Deliberately not run on an album or track page at all (see main()):
+   * those pages are full of release-shaped links that are not "browse to
+   * another release" at all, buy-this-album, the credits, "you might also
+   * like", people who bought this also bought, and badging every one of
+   * them is exactly the clutter decorateTrackTable/decorateNameSection/
+   * decorateInlinePlayer exist to avoid.
    */
   function attachInlineBadge(anchor, href) {
     if (getComputedStyle(anchor).position === 'static') anchor.style.position = 'relative';
@@ -654,7 +712,13 @@
     if (!isReleasePage()) addFab();
     decorateTrackTable();
     decorateNameSection();
-    scanForReleaseLinks();
+    decorateInlinePlayer();
+    // The generic scan is for browsable grids only, an album or track page
+    // is covered entirely by the three calls above, and is otherwise full
+    // of release-shaped links (buying the album, the credits, recommended
+    // releases) that scanning would badge for no reason, see its own
+    // comment above for the full list.
+    if (!isReleasePage()) scanForReleaseLinks();
 
     // Bandcamp's grids (wishlist, discover, an artist's discography) load
     // and re-render content well after the initial page load; each of these
@@ -662,7 +726,8 @@
     new MutationObserver(() => {
       decorateTrackTable();
       decorateNameSection();
-      scanForReleaseLinks();
+      decorateInlinePlayer();
+      if (!isReleasePage()) scanForReleaseLinks();
     }).observe(document.body, { childList: true, subtree: true });
   }
 

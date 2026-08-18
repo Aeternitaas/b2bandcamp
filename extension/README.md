@@ -34,7 +34,10 @@ b2bandcamp playlists without leaving Bandcamp.
   own title, click it to preview the release (art, title, every track) and
   add the whole thing or pick individual tracks. On an album, every row in
   the track list also gets its own **+** to its left, for adding just that
-  one track without opening the release picker.
+  one track without opening the release picker. The big player widget at
+  the top gets one too, just right of its scrub bar, for whatever track is
+  currently loaded there. Nothing else on the page does, buy links, credits,
+  and "you might also like" are not places to add from.
 - **Wishlist, discover, an artist's discography, or any page listing
   releases:** a small **+** badge appears on each album/track link. Same
   picker, scoped to that one item.
