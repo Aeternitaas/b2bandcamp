@@ -1,14 +1,14 @@
 // Package bandcamp wraps the public endpoints that back Bandcamp's own web and
 // mobile clients. Nothing here requires credentials, and no purchased or
-// download-only media is touched — only the same 128kbps preview streams the
+// download-only media is touched, only the same 128kbps preview streams the
 // public site plays.
 //
 // Endpoints used (verified against live responses):
 //
-//	POST /api/bcsearch_public_api/1/autocomplete_elastic  — search
-//	GET  /api/mobile/24/tralbum_details                   — album/track detail
-//	POST /api/fancollection/1/wishlist_items              — a fan's wishlist
-//	GET  <tralbum page>                                   — url -> ids, via meta tags
+//	POST /api/bcsearch_public_api/1/autocomplete_elastic: search
+//	GET  /api/mobile/24/tralbum_details: album/track detail
+//	POST /api/fancollection/1/wishlist_items: a fan's wishlist
+//	GET  <tralbum page>: url -> ids, via meta tags
 package bandcamp
 
 import (
@@ -51,7 +51,7 @@ func New() *Client {
 	return &Client{
 		http: &http.Client{
 			Timeout: 15 * time.Second,
-			// Stream URLs are resolved, not followed — we hand the redirect to
+			// Stream URLs are resolved, not followed, we hand the redirect to
 			// the browser so audio bytes never transit this server.
 			CheckRedirect: func(req *http.Request, via []*http.Request) error {
 				if len(via) >= 5 {
@@ -108,7 +108,7 @@ type Tralbum struct {
 	ReleaseDate string   `json:"release_date,omitempty"`
 	Tracks      []*Track `json:"tracks"`
 	// Up to 3 of this release's tags that are also one of Bandcamp's own
-	// established genres — most tags are freeform (a mood, a scene, a city)
+	// established genres, most tags are freeform (a mood, a scene, a city)
 	// and would be noise here, so anything not in that fixed list is dropped.
 	Genres []string `json:"genres,omitempty"`
 }
@@ -238,7 +238,7 @@ func (c *Client) Search(ctx context.Context, query, filter string) ([]*SearchRes
 			Username: r.Username,
 		}
 		// Track and album results carry an art_id, and the CDN requires an "a"
-		// prefix on the id for that size — which the "img" field this same
+		// prefix on the id for that size, which the "img" field this same
 		// response hands back omits, 404ing. Band/label results have no
 		// art_id, only an img_id for their photo, and that one's "img" field
 		// is already correctly formed, so it is fine to use as-is.

@@ -116,8 +116,8 @@ export function PlaylistView({
     return () => { cancelled = true }
   }, [playlist.id])
 
-  // Live updates from other collaborators. The stream carries no payload —
-  // just a cue to refetch — so it stays correct no matter what changed.
+  // Live updates from other collaborators. The stream carries no payload,
+  // just a cue to refetch, so it stays correct no matter what changed.
   // Share-link guests are excluded: EventSource cannot carry the
   // X-Share-Token header their access depends on, only the session cookie,
   // so they keep the plain fetch-on-load behavior instead.
@@ -194,7 +194,7 @@ export function PlaylistView({
     return numbers
   }, [tracks])
 
-  // "Show only their tracks" — hide everyone else rather than tracking a
+  // "Show only their tracks", hide everyone else rather than tracking a
   // separate mode, so the checkbox panel stays the single source of truth.
   const isolateContributor = useCallback((key: string) => {
     setHidden(new Set(contributors.map((c) => c.key).filter((k) => k !== key)))
@@ -219,7 +219,7 @@ export function PlaylistView({
   /**
    * Resolves a dropped link and lands it at the row it was dropped on,
    * rather than always at the end. There is no "insert at position" endpoint
-   * — this adds normally (which appends) and then reorders, reusing the same
+   *, this adds normally (which appends) and then reorders, reusing the same
    * two calls a drag-to-reorder already makes.
    */
   const addUrlAt = useCallback(async (index: number, e: React.DragEvent) => {
@@ -326,7 +326,7 @@ export function PlaylistView({
     if (detected <= 0 && !camelot) return
 
     // Mirrors the shared-cache result into the row so both the BPM and Key
-    // columns update without a reload. It writes detected_bpm, never bpm —
+    // columns update without a reload. It writes detected_bpm, never bpm,
     // bpm is the hand-entered override and analysis must not touch it.
     const target = tracks.find((t) => t.id === playerAnalysis.trackId)
     if (!target) return
@@ -343,7 +343,7 @@ export function PlaylistView({
   /**
    * Analyses a queue of tracks in turn, recording tempo and key. Shared by
    * every bulk-analysis entry point (selection, missing-only, and forced
-   * re-analysis of everything) — they differ only in which tracks go in and
+   * re-analysis of everything), they differ only in which tracks go in and
    * whether a cached result is trusted.
    */
   const runAnalysis = useCallback(async (queue: Track[], opts: { force?: boolean } = {}) => {
@@ -399,7 +399,7 @@ export function PlaylistView({
   /** Analyses only tracks with no tempo/key showing yet. */
   const analyzeMissing = useCallback(() => runAnalysis(tracksMissingAnalysis), [tracksMissingAnalysis, runAnalysis])
 
-  /** Re-analyses every track, ignoring whatever is already cached or shown —
+  /** Re-analyses every track, ignoring whatever is already cached or shown,
    *  for when the detector itself has improved and old results are stale. */
   const analyzeAll = useCallback(() => (
     runAnalysis(tracks.filter((t) => t.bc_band_id), { force: true })
@@ -407,7 +407,7 @@ export function PlaylistView({
 
   /**
    * Recomputes one track's analysis, ignoring any cached result. Tempo and key
-   * are written together — they come from the same pass, so updating one alone
+   * are written together, they come from the same pass, so updating one alone
    * would leave the row showing a stale pairing. Neither touches the manual
    * override in `bpm`.
    */
@@ -485,7 +485,7 @@ export function PlaylistView({
   const naturalOrder = !sort || (sort.key === 'position' && sort.direction === 'asc')
   const reordering = filtering || !naturalOrder
   const showHandle = canEdit && !reordering
-  // analyse, bandcamp link, delete — must match the trailing items TrackRow
+  // analyse, bandcamp link, delete, must match the trailing items TrackRow
   // renders, or the surplus wraps onto a second grid row.
   const actionCount = 2 + (canEdit ? 1 : 0)
   const gridTemplate = useMemo(

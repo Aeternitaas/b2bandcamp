@@ -187,7 +187,7 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleCreateAPIToken issues a bearer token from a username/password, the
-// same credentials handleLogin accepts — this is the "log in" step for a
+// same credentials handleLogin accepts, this is the "log in" step for a
 // client that cannot hold a session cookie, principally the browser
 // extension. See docs/API.md for the full token lifecycle.
 func (s *Server) handleCreateAPIToken(w http.ResponseWriter, r *http.Request) {
@@ -244,7 +244,7 @@ func (s *Server) handleCreateAPIToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// The only time the raw value is ever sent — it cannot be recovered
+	// The only time the raw value is ever sent, it cannot be recovered
 	// after this response, only revoked and reissued.
 	writeJSON(w, http.StatusCreated, map[string]any{
 		"token": raw,

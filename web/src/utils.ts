@@ -11,7 +11,7 @@ export function formatDuration(seconds: number): string {
   return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`
 }
 
-/** Compact "time ago", e.g. "5m", "3h", "2d" — matches the narrow track columns. */
+/** Compact "time ago", e.g. "5m", "3h", "2d", matches the narrow track columns. */
 export function formatAddedAgo(iso: string): string {
   const then = new Date(iso).getTime()
   if (!Number.isFinite(then)) return ''
@@ -88,7 +88,7 @@ export function debounce<A extends unknown[]>(fn: (...args: A) => void, ms: numb
  * Copies text, falling back for insecure contexts.
  *
  * navigator.clipboard is only exposed in a secure context, so it is absent when
- * the app is reached over plain http on a LAN address — which is exactly how
+ * the app is reached over plain http on a LAN address, which is exactly how
  * this gets used.
  */
 /**

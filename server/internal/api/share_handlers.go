@@ -45,7 +45,7 @@ func (s *Server) handleCreateShareLink(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Short tokens live in a small enough space that a collision with the
-	// unique index, while very unlikely, is possible — so retry rather than
+	// unique index, while very unlikely, is possible, so retry rather than
 	// surfacing a duplicate-key error to the user.
 	var (
 		token string
@@ -90,7 +90,7 @@ func (s *Server) handleCreateShareLink(w http.ResponseWriter, r *http.Request) {
 }
 
 // shareURL returns an absolute link when a canonical public address is
-// configured, and "" otherwise — in which case the client falls back to the
+// configured, and "" otherwise, in which case the client falls back to the
 // origin the browser is already on, which is right for LAN and dev use.
 func (s *Server) shareURL(token string) string {
 	if s.cfg.PublicBaseURL == "" {
@@ -322,7 +322,7 @@ func (s *Server) handleUserProfile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		// Email is deliberately omitted — profiles are public.
+		// Email is deliberately omitted, profiles are public.
 		"user":      map[string]any{"username": u.Username, "created_at": u.CreatedAt},
 		"playlists": list,
 		"is_self":   isSelf,

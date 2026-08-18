@@ -14,12 +14,12 @@ interface Props {
   onAddTrack: (ref: TrackRef) => Promise<void>
 }
 
-// Matches .add-choice-popover.wide's min-width — used to keep the popover
+// Matches .add-choice-popover.wide's min-width, used to keep the popover
 // clear of the viewport edge before it has actually rendered and can be
 // measured itself.
 const POPOVER_WIDTH = 330
-// How long the pointer can be off both the trigger and the popover — the gap
-// between them, plus ordinary mouse jitter — before the menu actually closes.
+// How long the pointer can be off both the trigger and the popover, the gap
+// between them, plus ordinary mouse jitter, before the menu actually closes.
 const CLOSE_DELAY = 150
 
 /**
@@ -54,7 +54,7 @@ export function WishlistAlbumMenu({ item, canEdit, added, busy, onAddAlbum, onAd
 
   // Fixed viewport coordinates do not follow the sidebar's own scrolling, so
   // a scroll while open would otherwise leave the popover pointing at
-  // nothing — closing it is simpler than re-measuring on every scroll event.
+  // nothing, closing it is simpler than re-measuring on every scroll event.
   useEffect(() => {
     if (!open) return
     const onScroll = () => setOpen(false)
@@ -64,7 +64,7 @@ export function WishlistAlbumMenu({ item, canEdit, added, busy, onAddAlbum, onAd
 
   // Positioned in viewport coordinates rather than relative to any ancestor,
   // so it never depends on how much room this row's own layout happens to
-  // leave to either side of the trigger — clamped so it lands fully on
+  // leave to either side of the trigger, clamped so it lands fully on
   // screen even when the trigger sits close to an edge.
   useLayoutEffect(() => {
     if (!open) return
@@ -75,7 +75,7 @@ export function WishlistAlbumMenu({ item, canEdit, added, busy, onAddAlbum, onAd
     setPos({ top: rect.bottom + 6, left })
   }, [open])
 
-  // Fetched only once the menu is actually opened — a wishlist page can hold
+  // Fetched only once the menu is actually opened, a wishlist page can hold
   // dozens of albums and pre-fetching all of them would be wasteful.
   useEffect(() => {
     if (!open || detail || loading) return
@@ -166,7 +166,7 @@ export function WishlistAlbumMenu({ item, canEdit, added, busy, onAddAlbum, onAd
                       })}
                       disabled={!t.streamable}
                       aria-label={`Preview ${t.title}`}
-                      title={t.streamable ? 'Preview — press again to skip ahead' : 'Not streamable'}
+                      title={t.streamable ? 'Preview, press again to skip ahead' : 'Not streamable'}
                     >
                       {t.art_url || detail.art_url
                         ? <img src={t.art_url || detail.art_url} alt="" loading="lazy" />

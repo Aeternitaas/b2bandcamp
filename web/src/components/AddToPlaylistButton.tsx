@@ -3,7 +3,7 @@ import { Icon } from './Icon'
 import type { Playlist } from '../types'
 
 interface Props {
-  /** The user's other editable playlists — excludes whichever one is open. */
+  /** The user's other editable playlists, excludes whichever one is open. */
   playlists: Playlist[]
   disabled?: boolean
   label: string

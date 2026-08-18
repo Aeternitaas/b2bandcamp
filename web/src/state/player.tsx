@@ -50,7 +50,7 @@ const PlayerContext = createContext<PlayerValue | null>(null)
 const VOLUME_KEY = 'b2bandcamp:volume'
 const PLAYBACK_KEY = 'b2bandcamp:playback'
 
-/** Discard a restored position older than this — resuming a track from weeks
+/** Discard a restored position older than this, resuming a track from weeks
  *  ago is more surprising than useful. */
 const RESUME_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
 
@@ -70,7 +70,7 @@ const IDLE_ANALYSIS: Analysis = {
 
 export function PlayerProvider({ children }: { children: ReactNode }) {
   // One audio element for the lifetime of the app. Reusing it matters on iOS,
-  // where playback may only start from inside a user gesture — creating a new
+  // where playback may only start from inside a user gesture, creating a new
   // element per track would break autoplay of the next track in the queue.
   const audioRef = useRef<HTMLAudioElement | null>(null)
   if (audioRef.current === null && typeof Audio !== 'undefined') {
@@ -214,7 +214,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
   // Restore the last track on load. Playback stays paused: browsers block
   // autoplay without a user gesture, so starting here would either fail or be
-  // unwelcome — the track is simply cued up where it left off.
+  // unwelcome, the track is simply cued up where it left off.
   useEffect(() => {
     let saved: PersistedPlayback | null = null
     try {

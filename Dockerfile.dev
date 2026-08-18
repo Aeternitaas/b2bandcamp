@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 #
 # Development image for the Go server: watches the source tree and rebuilds on
-# save. Only used by docker-compose.dev.yml — production still uses the slim
+# save. Only used by docker-compose.dev.yml, production still uses the slim
 # multi-stage build in Dockerfile.
 FROM golang:1.23-alpine
 

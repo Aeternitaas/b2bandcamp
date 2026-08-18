@@ -168,7 +168,7 @@ func (s *Server) handleBCStream(w http.ResponseWriter, r *http.Request) {
 // handleBCAudio relays the audio bytes instead of redirecting to them.
 //
 // Web Audio cannot read samples from a cross-origin response that carries no
-// CORS headers, and Bandcamp's CDN sends none — an <audio> element plays such a
+// CORS headers, and Bandcamp's CDN sends none, an <audio> element plays such a
 // stream fine, but an AnalyserNode attached to it only ever sees silence. The
 // waveform, BPM and key features therefore need the audio to arrive same-origin,
 // which is what this endpoint provides. Normal playback still uses the redirect

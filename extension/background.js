@@ -5,7 +5,7 @@
  * never through the content script directly. Two reasons: a self-hosted
  * instance can be on any domain, and only a privileged extension context
  * (background, popup) with a granted host permission can fetch cross-origin
- * without running into the page's own CORS/CSP — a content script's fetches
+ * without running into the page's own CORS/CSP, a content script's fetches
  * run in the *page's* origin and would be blocked exactly like any other
  * cross-site request from bandcamp.com. See docs/API.md for the HTTP side
  * of this contract.
@@ -39,13 +39,17 @@ function normalizeInstanceUrl(input) {
   return url.origin;
 }
 
-/** Requests the host permission a fetch to this origin needs. Must be called
- *  from a user-gesture context (the popup) — background pages cannot prompt. */
-async function ensureOriginPermission(origin) {
-  const pattern = `${origin}/*`;
-  const granted = await chrome.permissions.contains({ origins: [pattern] });
-  if (granted) return true;
-  return chrome.permissions.request({ origins: [pattern] });
+/**
+ * Whether the extension currently holds the runtime host permission for
+ * this origin. This service worker can only check, it cannot request:
+ * chrome.permissions.request() requires an active user gesture, and a
+ * background service worker has no window/document and so never has one,
+ * no matter how directly a click in the popup triggered this call. The
+ * popup calls chrome.permissions.request() itself, synchronously within
+ * its click handler, before sending the "ping" or "login" message.
+ */
+async function hasOriginPermission(origin) {
+  return chrome.permissions.contains({ origins: [`${origin}/*`] });
 }
 
 class APIError extends Error {
@@ -58,7 +62,7 @@ class APIError extends Error {
 /**
  * Calls one JSON endpoint on the linked instance. Throws APIError with the
  * server's own message on a non-2xx response, and a plain Error (no status)
- * when there is no linked instance at all — callers use that distinction to
+ * when there is no linked instance at all, callers use that distinction to
  * tell "not logged in" apart from "the server rejected this."
  */
 async function apiFetch(path, options = {}) {
@@ -95,7 +99,7 @@ const handlers = {
    *  for a permission grant or credentials. */
   async ping({ instanceUrl }) {
     const origin = normalizeInstanceUrl(instanceUrl);
-    if (!(await ensureOriginPermission(origin))) {
+    if (!(await hasOriginPermission(origin))) {
       throw new Error('Permission to reach that site was not granted.');
     }
     const res = await fetch(`${origin}/api/health`);
@@ -106,7 +110,7 @@ const handlers = {
   /** Step 2: exchange credentials for a token, and remember the instance. */
   async login({ instanceUrl, login, password }) {
     const origin = normalizeInstanceUrl(instanceUrl);
-    if (!(await ensureOriginPermission(origin))) {
+    if (!(await hasOriginPermission(origin))) {
       throw new Error('Permission to reach that site was not granted.');
     }
 
@@ -123,7 +127,7 @@ const handlers = {
     return { instanceUrl: origin, label: data.label };
   },
 
-  /** Best-effort revoke on the server, then forget the instance either way —
+  /** Best-effort revoke on the server, then forget the instance either way,
    *  a network error here should not leave the user stuck "logged in" to a
    *  extension that no longer has a usable token. */
   async logout() {
@@ -132,7 +136,7 @@ const handlers = {
       try {
         await apiFetch(`/api/account/tokens/${link.tokenId}`, { method: 'DELETE' });
       } catch {
-        // ignored — clearing the local copy is what actually matters
+        // ignored, clearing the local copy is what actually matters
       }
     }
     await clearLink();
@@ -149,8 +153,8 @@ const handlers = {
     return apiFetch('/api/playlists', { method: 'POST', body: JSON.stringify({ title }) });
   },
 
-  /** Full detail for one Bandcamp release — art, title, artist, and every
-   *  track with its own streamable/duration/art — used for both the "is this
+  /** Full detail for one Bandcamp release, art, title, artist, and every
+   *  track with its own streamable/duration/art, used for both the "is this
    *  a track or an album" check and the Discover overlay's track browser. */
   async resolveUrl({ url }) {
     return apiFetch('/api/bc/resolve', { method: 'POST', body: JSON.stringify({ url }) });

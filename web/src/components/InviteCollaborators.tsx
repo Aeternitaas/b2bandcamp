@@ -106,7 +106,7 @@ export function InviteCollaborators({ playlistId, collaborators, onChange }: Pro
             >
               {u.username}
               {alreadyInvited.has(u.username.toLowerCase()) && (
-                <span className="faint small"> — already invited</span>
+                <span className="faint small">, already invited</span>
               )}
             </button>
           ))}

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
  * Subscribes to a media query.
  *
  * Layout decisions that change *markup* (not just styling) have to be made in
- * JS — the track grid builds its column template programmatically, so CSS alone
+ * JS, the track grid builds its column template programmatically, so CSS alone
  * cannot collapse it.
  */
 export function useMediaQuery(query: string): boolean {
@@ -27,7 +27,7 @@ export function useCompactLayout(): boolean {
   return useMediaQuery('(max-width: 640px)')
 }
 
-/** True when the primary input cannot hover — i.e. a touchscreen. */
+/** True when the primary input cannot hover, i.e. a touchscreen. */
 export function useTouchPrimary(): boolean {
   return useMediaQuery('(hover: none) and (pointer: coarse)')
 }

@@ -23,7 +23,7 @@ export function Player() {
    * track is loaded, so an effect with empty deps runs while the element does
    * not exist yet and never fires again once it appears. This runs on every
    * mount and unmount of the bar, which is exactly when the measurement
-   * changes — including when the analysis panel expands it.
+   * changes, including when the analysis panel expands it.
    */
   const measureBar = useCallback((node: HTMLDivElement | null) => {
     observerRef.current?.disconnect()
@@ -78,13 +78,13 @@ export function Player() {
   // The bar's key readout is a preview only: it always shows what the key
   // would become at the current tempo, regardless of whether pitch
   // correction (set from the full Now Playing view) is actually on. Nothing
-  // here commits — the audio element's real pitch handling is untouched.
+  // here commits, the audio element's real pitch handling is untouched.
   const shift = semitonesForRate(player.rate)
   const shownKey = analysis.key && shift !== 0
     ? transposeKey(analysis.key, shift)
     : analysis.key
   const detune = centsOffset(shift)
-  // The slider works in percent so that 0 — unmodified playback — sits exactly
+  // The slider works in percent so that 0, unmodified playback, sits exactly
   // at the centre, the way a pitch fader does.
   const percent = (player.rate - 1) * 100
   const effectiveVolume = muted ? 0 : volume
@@ -155,12 +155,12 @@ export function Player() {
                   ? Math.round(analysis.tempo.bpm * player.rate)
                   : current.detected_bpm
                     ? Math.round(current.detected_bpm * player.rate)
-                    : '—'}
+                    : ', '}
               </span>
             </span>
             <span className="p-stat">
               <span className="p-stat-label">Key</span>
-              <span className="p-stat-value">{shownKey ? shownKey.camelot : '—'}</span>
+              <span className="p-stat-value">{shownKey ? shownKey.camelot : ', '}</span>
               {shownKey && <span className="p-stat-sub">{shortKeyName(shownKey.name)}</span>}
             </span>
           </div>
@@ -248,7 +248,7 @@ export function Player() {
   )
 }
 
-/** "A# minor" -> "Bbm" — the notation that fits in a player-bar readout. */
+/** "A# minor" -> "Bbm", the notation that fits in a player-bar readout. */
 function shortKeyName(name: string): string {
   const [tonic, scale] = name.split(' ')
   if (!tonic) return name

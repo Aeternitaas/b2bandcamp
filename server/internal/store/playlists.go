@@ -66,7 +66,7 @@ func (s *Store) ListPlaylistsForUser(ctx context.Context, userID int64) ([]*Play
 }
 
 // PublicPlaylistsByOwner backs a user's profile page. Only playlists the owner
-// marked public are listed — private and shared ones stay invisible to anyone
+// marked public are listed, private and shared ones stay invisible to anyone
 // browsing the profile.
 func (s *Store) PublicPlaylistsByOwner(ctx context.Context, username string) ([]*Playlist, error) {
 	rows, err := s.DB.QueryContext(ctx, playlistSelect+`
@@ -444,7 +444,7 @@ func (s *Store) SetTrackNote(ctx context.Context, playlistID, trackRowID int64, 
 // SetTrackAddedBy reassigns attribution for one playlist row, or clears it to
 // anonymous when userID is nil. The caller is responsible for checking that
 // userID actually belongs to this playlist (owner or collaborator) before
-// calling this — the update itself does not re-derive that.
+// calling this, the update itself does not re-derive that.
 func (s *Store) SetTrackAddedBy(ctx context.Context, playlistID, trackRowID int64, userID *int64) error {
 	_, err := s.DB.ExecContext(ctx,
 		`UPDATE playlist_tracks SET added_by = ? WHERE id = ? AND playlist_id = ?`,

@@ -9,8 +9,8 @@ interface Props {
 }
 
 /**
- * Tempo cell. Detection is a heuristic and gets tracks wrong — especially
- * half/double-time — so the value is always hand-correctable.
+ * Tempo cell. Detection is a heuristic and gets tracks wrong, especially
+ * half/double-time, so the value is always hand-correctable.
  */
 export function BpmCell({ bpm, overridden, editable, onSave }: Props) {
   const [editing, setEditing] = useState(false)
@@ -69,9 +69,9 @@ export function BpmCell({ bpm, overridden, editable, onSave }: Props) {
       className={`bpm-cell${bpm ? '' : ' empty'}${overridden ? ' overridden' : ''}`}
       onClick={(e) => { e.stopPropagation(); begin() }}
       disabled={!editable || busy}
-      title={overridden ? 'Manually set — click to edit' : editable ? 'Click to edit tempo' : undefined}
+      title={overridden ? 'Manually set, click to edit' : editable ? 'Click to edit tempo' : undefined}
     >
-      {busy ? <div className="spin" /> : bpm ? Math.round(bpm) : '—'}
+      {busy ? <div className="spin" /> : bpm ? Math.round(bpm) : ', '}
     </button>
   )
 }

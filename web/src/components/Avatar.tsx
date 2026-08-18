@@ -2,7 +2,7 @@ interface Props {
   /** Account name; the first two letters become the fallback initials. */
   name: string
   avatarUrl?: string
-  /** Account id — seeds the fallback colour so a user's tile is always theirs. */
+  /** Account id, seeds the fallback colour so a user's tile is always theirs. */
   userId?: number | null
   size?: number
   title?: string

@@ -100,12 +100,12 @@ listable on a profile); editing them still requires the link or an invite.
 **Browser extension**
 
 `extension/` is a Chrome extension that adds a **+ Add to playlist** control
-directly on Bandcamp's own album, track, wishlist, and discover/browse pages —
+directly on Bandcamp's own album, track, wishlist, and discover/browse pages,
 add something without leaving Bandcamp or switching tabs. It links to any
 b2bandcamp instance by URL and signs in with a token rather than a shared
 session, so it works the same way against a self-hosted instance as this app
 itself does. See `extension/README.md` to install it and `docs/API.md` for the
-API it talks to (the same one the web app uses — nothing extension-only).
+API it talks to (the same one the web app uses, nothing extension-only).
 
 ---
 
@@ -327,11 +327,11 @@ web/
 ### API
 
 **Full reference, with request/response bodies and examples: [`docs/API.md`](docs/API.md).**
-This is the same API the web app itself uses — nothing is held back for an
+This is the same API the web app itself uses, nothing is held back for an
 "internal" surface, which is what makes the browser extension (and anything
 else you might build) possible without a second, parallel API.
 
-Quick orientation — every endpoint is under `/api`. Requests authenticate with
+Quick orientation, every endpoint is under `/api`. Requests authenticate with
 either the browser's session cookie (plus `X-CSRF-Token` on any mutation) or
 an `Authorization: Bearer <token>` header (see `POST /api/auth/tokens`);
 share-link access additionally takes `X-Share-Token`.

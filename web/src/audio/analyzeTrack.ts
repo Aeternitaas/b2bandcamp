@@ -35,7 +35,7 @@ function decodePeaks(b64: string): Float32Array {
  * Analyses one track's audio: waveform peaks, tempo and key.
  *
  * Shared by the player (current track) and the playlist's batch action, so
- * both paths produce identical numbers. The worker is created once and reused —
+ * both paths produce identical numbers. The worker is created once and reused,
  * spinning one up per track would cost more than the analysis itself.
  */
 
@@ -48,7 +48,7 @@ const pending = new Map<number, {
 
 /**
  * Analyses already running, keyed by track. Analysing one track twice at once
- * — say the player panel and a batch run reaching it together — would download
+ *, say the player panel and a batch run reaching it together, would download
  * and decode the same audio twice and race to write the same cache row, so
  * callers share the in-flight promise instead.
  */
@@ -158,7 +158,7 @@ async function runAnalysis(
         }
       }
     } catch {
-      // A cache miss or an unreachable cache is not a failure — fall through
+      // A cache miss or an unreachable cache is not a failure, fall through
       // and compute it locally.
     }
   }

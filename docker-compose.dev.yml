@@ -2,7 +2,7 @@
 #
 #   docker compose -f docker-compose.dev.yml up
 #
-# Open http://<host>:5173 — Vite serves the UI with hot module replacement and
+# Open http://<host>:5173, Vite serves the UI with hot module replacement and
 # proxies /api to the Go server, which air rebuilds on save.
 #
 # This declares its own project name so it never touches the production stack's

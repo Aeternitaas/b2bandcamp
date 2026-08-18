@@ -10,7 +10,7 @@ import type { Fan, Playlist, TrackRef, WishlistItem } from '../types'
 import { Icon } from './Icon'
 
 /** Everything about the last-loaded wishlist, held by the parent so it
- *  survives the panel closing and reopening — closing this panel is meant to
+ *  survives the panel closing and reopening, closing this panel is meant to
  *  be dismissal, not a reason to lose what was already fetched. */
 export interface WishlistCache {
   fan: Fan | null
@@ -39,7 +39,7 @@ interface Props {
 export function WishlistSidebar({ canEdit, currentPlaylistId, cache, onCacheChange, onClose, onAdd }: Props) {
   const { fan, items, token, more } = cache
   // Other playlists this item could go to instead of (or as well as) the one
-  // that is open. Fetched once — the "+" next to each item covers the open
+  // that is open. Fetched once, the "+" next to each item covers the open
   // playlist already, this is only for sending a copy somewhere else.
   const [otherPlaylists, setOtherPlaylists] = useState<Playlist[]>([])
   useEffect(() => {
@@ -56,7 +56,7 @@ export function WishlistSidebar({ canEdit, currentPlaylistId, cache, onCacheChan
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   // Which wishlisted album is showing its track list inline, right under its
-  // own row — an accordion, not a navigation, so the list underneath it never
+  // own row, an accordion, not a navigation, so the list underneath it never
   // unmounts and its scroll position survives opening one.
   const [expandedAlbum, setExpandedAlbum] = useState<number | null>(null)
   const [busy, setBusy] = useState<number | null>(null)
@@ -110,7 +110,7 @@ export function WishlistSidebar({ canEdit, currentPlaylistId, cache, onCacheChan
     }
   }, [loadPage, onCacheChange])
 
-  /** Re-fetches the current fan's wishlist from scratch — for picking up a
+  /** Re-fetches the current fan's wishlist from scratch, for picking up a
    *  track added on Bandcamp since it was last loaded. */
   const reload = useCallback(() => {
     if (fan) void loadPage(fan.fan_id, '', true)
@@ -216,7 +216,7 @@ export function WishlistSidebar({ canEdit, currentPlaylistId, cache, onCacheChan
                 onClick={reload}
                 disabled={loading}
                 aria-label={`Reload ${fan.username}'s wishlist`}
-                title="Reload — pick up anything added on Bandcamp since this last loaded"
+                title="Reload, pick up anything added on Bandcamp since this last loaded"
               >
                 <Icon name="rotate-ccw" size={13} />
               </button>
@@ -260,7 +260,7 @@ export function WishlistSidebar({ canEdit, currentPlaylistId, cache, onCacheChan
                     )}
                   </div>
                   <span className="faint small">
-                    Not saved to the playlist — this is just for browsing while you build it.
+                    Not saved to the playlist, this is just for browsing while you build it.
                     {!linked && ' Link your Bandcamp account in Settings to open your own wishlist by default.'}
                   </span>
                 </div>
@@ -298,7 +298,7 @@ export function WishlistSidebar({ canEdit, currentPlaylistId, cache, onCacheChan
                         className="wish-art"
                         onClick={() => previewItem(item)}
                         aria-label={`Preview ${item.title}`}
-                        title="Preview — press again to skip ahead"
+                        title="Preview, press again to skip ahead"
                       >
                         {item.art_url
                           ? <img src={item.art_url} alt="" loading="lazy" />

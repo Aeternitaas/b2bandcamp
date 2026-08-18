@@ -73,7 +73,7 @@ func (s *Store) UserByUsername(ctx context.Context, username string) (*User, err
 }
 
 // SearchUsers finds accounts by username prefix, for the collaborator invite
-// field. Email is never matched or returned — inviting someone should not be a
+// field. Email is never matched or returned, inviting someone should not be a
 // way to confirm which addresses have accounts.
 func (s *Store) SearchUsers(ctx context.Context, query string, limit int) ([]*User, error) {
 	if limit <= 0 || limit > 25 {

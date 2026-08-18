@@ -7,7 +7,7 @@ interface Props {
 }
 
 /**
- * A free-text note on a playlist entry — "great intro", "needs a re-edit",
+ * A free-text note on a playlist entry, "great intro", "needs a re-edit",
  * or whatever else is worth remembering about that particular row.
  */
 export function NoteCell({ note, editable, onSave }: Props) {
@@ -67,7 +67,7 @@ export function NoteCell({ note, editable, onSave }: Props) {
       disabled={!editable || busy}
       title={note || (editable ? 'Click to add a note' : undefined)}
     >
-      {busy ? <div className="spin" /> : (note ? <span className="truncate">{note}</span> : '—')}
+      {busy ? <div className="spin" /> : (note ? <span className="truncate">{note}</span> : ', ')}
     </button>
   )
 }

@@ -158,7 +158,7 @@ function AnalysisTab({ progress }: { progress: number }) {
           <div className="stat">
             <div className="stat-label">Tempo</div>
             <div className="stat-value">
-              {analysis.tempo && analysis.tempo.bpm > 0 ? `${analysis.tempo.bpm}` : '—'}
+              {analysis.tempo && analysis.tempo.bpm > 0 ? `${analysis.tempo.bpm}` : ', '}
               <span className="stat-unit"> BPM</span>
             </div>
             {analysis.tempo && (
@@ -185,7 +185,7 @@ function AnalysisTab({ progress }: { progress: number }) {
 
           <div className="stat">
             <div className="stat-label">Key</div>
-            <div className="stat-value">{shownKey ? shownKey.name : '—'}</div>
+            <div className="stat-value">{shownKey ? shownKey.name : ', '}</div>
             {shownKey && (
               <div className="faint small">
                 Camelot {shownKey.camelot} · {confidenceLabel(shownKey.confidence)}
@@ -203,7 +203,7 @@ function AnalysisTab({ progress }: { progress: number }) {
 
       <div className="field">
         <label htmlFor="rate">
-          Playback tempo — {percent >= 0 ? '+' : ''}{percent.toFixed(1)}%
+          Playback tempo, {percent >= 0 ? '+' : ''}{percent.toFixed(1)}%
           {analysis.tempo && analysis.tempo.bpm > 0 && (
             <span className="faint"> ({Math.round(analysis.tempo.bpm * player.rate)} BPM)</span>
           )}
@@ -310,7 +310,7 @@ function AlbumTab({
       </a>
 
       <span className="faint small">
-        Playing from the current queue — {player.queue.length} track{player.queue.length === 1 ? '' : 's'}.
+        Playing from the current queue, {player.queue.length} track{player.queue.length === 1 ? '' : 's'}.
       </span>
     </div>
   )

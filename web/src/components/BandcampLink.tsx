@@ -12,7 +12,7 @@ interface Props {
 /**
  * Links a Bandcamp profile to the account and optionally adopts its picture.
  *
- * The link is a self-declared association, not a verified one — it grants no
+ * The link is a self-declared association, not a verified one, it grants no
  * access to anything, it just puts a recognisable face on the tracks you add.
  */
 export function BandcampLink({ user, onChange }: Props) {
@@ -62,7 +62,7 @@ export function BandcampLink({ user, onChange }: Props) {
     try {
       await api.setAvatar('')
       await onChange()
-      setStatus('Picture removed — your initials will be shown instead.')
+      setStatus('Picture removed, your initials will be shown instead.')
     } catch (e) {
       setError((e as Error).message)
     } finally {
@@ -96,7 +96,7 @@ export function BandcampLink({ user, onChange }: Props) {
         </div>
       ) : (
         <span className="faint small">
-          Link your Bandcamp profile so your contributions are recognisable. This is just a label —
+          Link your Bandcamp profile so your contributions are recognisable. This is just a label,
           it gives b2bandcamp no access to your Bandcamp account.
         </span>
       )}

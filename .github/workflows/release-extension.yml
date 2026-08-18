@@ -1,0 +1,52 @@
+name: Release extension
+
+# Tag push builds and publishes automatically; workflow_dispatch lets you
+# re-run the same build for an existing tag without pushing a new one.
+on:
+  push:
+    tags:
+      - "extension-v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to build (e.g. extension-v1.2.0)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - name: Resolve tag and version
+        id: version
+        run: |
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          VERSION="${TAG#extension-v}"
+          MANIFEST_VERSION=$(node -p "require('./extension/manifest.json').version")
+          if [ "$VERSION" != "$MANIFEST_VERSION" ]; then
+            echo "Tag $TAG (version $VERSION) does not match extension/manifest.json version $MANIFEST_VERSION" >&2
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Package extension
+        run: |
+          mkdir -p dist
+          cd extension
+          zip -r "../dist/b2bandcamp-extension-${{ steps.version.outputs.version }}.zip" . -x "README.md"
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: "Extension v${{ steps.version.outputs.version }}"
+          generate_release_notes: true
+          files: dist/b2bandcamp-extension-${{ steps.version.outputs.version }}.zip

@@ -5,7 +5,7 @@
  * separate from Bandcamp's own DOM and stylesheets. Two reasons: Bandcamp's
  * album/track/wishlist pages are a mix of classic server-rendered markup and
  * newer client-rendered ones, so there is no single set of CSS classes that
- * would reliably match a link's "add" button across all of them — and
+ * would reliably match a link's "add" button across all of them, and
  * whatever selectors do match today are outside our control and could change
  * on Bandcamp's next redesign. Detecting releases by *link shape* instead
  * (an <a href> pointing at an /album/ or /track/ page) is far more stable
@@ -166,7 +166,7 @@
   let closeActivePanel = null;
 
   /**
-   * Opens the add-to-playlist panel anchored near (x, y) — the click that
+   * Opens the add-to-playlist panel anchored near (x, y), the click that
    * triggered it. `release` is either a resolved Tralbum (already fetched)
    * or a function returning one, so the panel can show a loading state
    * while the badge that opened it is still resolving.
@@ -219,7 +219,7 @@
     renderPanel(panel, playlists, release, close);
 
     // The panel's real height depends on the track list just rendered, which
-    // was not known when it was first positioned — an album with a lot of
+    // was not known when it was first positioned, an album with a lot of
     // tracks can run past the bottom of the screen even though the panel's
     // own max-height/overflow keeps any *single* panel from growing past
     // 70vh. Shift it up (never down) if it does.
@@ -250,7 +250,7 @@
     if (playlists.length === 0) {
       panel.appendChild(Object.assign(document.createElement('p'), {
         className: 'empty',
-        textContent: 'No playlists yet — create one in b2bandcamp first.'
+        textContent: 'No playlists yet, create one in b2bandcamp first.'
       }));
       return;
     }
@@ -399,7 +399,7 @@
     reposition();
 
     // Anchors move constantly on Bandcamp's own infinite-scroll and
-    // client-rendered grids — cheap to recompute, so just always do it.
+    // client-rendered grids, cheap to recompute, so just always do it.
     const interval = setInterval(reposition, 400);
 
     badge.addEventListener('click', e => {
@@ -454,7 +454,7 @@
   }
 
   /** Off a grid/browse page (Discover, a tag page, a feed) there is no
-   *  single release the button obviously means — ask for a link instead of
+   *  single release the button obviously means, ask for a link instead of
    *  guessing at one. Browsing-and-picking on those pages is what the small
    *  per-item "+" badges from scanForReleaseLinks are for; this covers the
    *  case where none matched (a page layout the link-shape heuristic missed). */

@@ -196,7 +196,7 @@ CREATE TABLE IF NOT EXISTS track_analysis (
 	// though a person had typed them, which is wrong and misleading.
 	//
 	// Two signatures identify an auto-written value: it matches the cached
-	// detection for that track, or it has a fractional part — the detector
+	// detection for that track, or it has a fractional part, the detector
 	// reports one decimal place, while a person types a whole number. This runs
 	// once, so it cannot affect anything entered from here on.
 	{"012_clear_auto_bpm_overrides", `
@@ -207,7 +207,7 @@ UPDATE playlist_tracks t
    AND ((a.bpm IS NOT NULL AND ABS(t.bpm - a.bpm) < 0.05)
         OR t.bpm <> ROUND(t.bpm))`},
 
-	// A free-text note on a playlist entry — "great intro", "needs a re-edit",
+	// A free-text note on a playlist entry, "great intro", "needs a re-edit",
 	// whatever is worth remembering about that row. Purely additive: existing
 	// rows just get NULL, read back as an empty string.
 	{"013_track_note", `
@@ -215,10 +215,10 @@ ALTER TABLE playlist_tracks
   ADD COLUMN note VARCHAR(280) NULL AFTER key_override`},
 
 	// Long-lived bearer tokens for API clients that cannot hold a browser
-	// session cookie — the Chrome extension, primarily. Mirrors sessions:
+	// session cookie, the Chrome extension, primarily. Mirrors sessions:
 	// only a hash is stored, so a database leak does not hand over a working
-	// credential. Unlike a session there is no expiry — a browser extension
-	// has nowhere convenient to prompt a re-login — so revocation is manual
+	// credential. Unlike a session there is no expiry, a browser extension
+	// has nowhere convenient to prompt a re-login, so revocation is manual
 	// (DELETE /api/account/tokens/{id}) and last_used_at exists so a person
 	// can tell a stale token from one still in use before revoking it.
 	{"014_api_tokens", `

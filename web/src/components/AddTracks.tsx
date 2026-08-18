@@ -23,7 +23,7 @@ const TABS: { key: string; label: string }[] = [
 
 /**
  * Two ways in: paste a Bandcamp link, or search Bandcamp. Both land on the
- * same expanded release view — with a preview — before anything is added,
+ * same expanded release view, with a preview, before anything is added,
  * whether it turns out to be a whole album or a single track. Each search
  * result also has its own quick-add "+", for adding several different
  * matches straight from the list without opening any of them.
@@ -36,7 +36,7 @@ export function AddTracks({ onClose, onAdd }: Props) {
   const [error, setError] = useState('')
   const [selected, setSelected] = useState<Selection | null>(null)
   const [addingUrl, setAddingUrl] = useState(false)
-  // Per-row quick-add, keyed by "type-id" — lets several different results be
+  // Per-row quick-add, keyed by "type-id", lets several different results be
   // added straight from the list, one "+" press each, without opening any of
   // them and without the popup closing in between.
   const [addingRow, setAddingRow] = useState<string | null>(null)
@@ -73,8 +73,8 @@ export function AddTracks({ onClose, onAdd }: Props) {
   }, 280), [])
 
   // A pasted link resolves to the same expanded release view a search result
-  // opens into — art, title, artist, and a preview, whether it turns out to
-  // be a whole album or a single track — rather than committing to adding it
+  // opens into, art, title, artist, and a preview, whether it turns out to
+  // be a whole album or a single track, rather than committing to adding it
   // sight (and sound) unheard. The preview itself loads as soon as a
   // recognisable link is pasted, same as search results loading as you type;
   // only the audio stays behind an explicit press, inside that view.
@@ -140,8 +140,8 @@ export function AddTracks({ onClose, onAdd }: Props) {
     }
   }
 
-  /** Adds a result straight from the list — the whole release if it is an
-   *  album — so several different matches can be added in a row without
+  /** Adds a result straight from the list, the whole release if it is an
+   *  album, so several different matches can be added in a row without
    *  opening any of them. */
   const quickAdd = async (r: SearchResult) => {
     const key = `${r.type}-${r.id}`
@@ -159,7 +159,7 @@ export function AddTracks({ onClose, onAdd }: Props) {
 
   const pick = (r: SearchResult) => {
     if (r.type === 'b') {
-      // An artist has no tracks of its own — search their catalogue instead.
+      // An artist has no tracks of its own, search their catalogue instead.
       setQuery(r.name)
       setFilter('a')
       return
@@ -232,7 +232,7 @@ export function AddTracks({ onClose, onAdd }: Props) {
                       style={{ width: 40, height: 40 }}
                       onClick={() => void previewResult(r)}
                       aria-label={`Preview ${r.name}`}
-                      title="Preview — press again to skip ahead"
+                      title="Preview, press again to skip ahead"
                     >
                       {r.art_url
                         ? <img src={r.art_url} alt="" loading="lazy" />

@@ -107,7 +107,7 @@ export function PlaylistSettings({ playlist, isOwner, onClose, onSaved, onDelete
       if (!(await copyText(shareUrl))) throw new Error('copy unavailable')
       setStatus('Link copied.')
     } catch {
-      setStatus('Copy failed — select the link above and copy it manually.')
+      setStatus('Copy failed, select the link above and copy it manually.')
     }
   }
 
@@ -155,9 +155,9 @@ export function PlaylistSettings({ playlist, isOwner, onClose, onSaved, onDelete
           <div className="field">
             <label htmlFor="pl-vis">Who can edit</label>
             <select id="pl-vis" value={visibility} onChange={(e) => setVisibility(e.target.value as Visibility)}>
-              <option value="private">Private — only me and people I invite</option>
-              <option value="shared">Shared — invited collaborators, link to listen</option>
-              <option value="public">Public — listed on my profile</option>
+              <option value="private">Private, only me and people I invite</option>
+              <option value="shared">Shared, invited collaborators, link to listen</option>
+              <option value="public">Public, listed on my profile</option>
             </select>
             <span className="faint small">{VISIBILITY_HELP[visibility]}</span>
           </div>

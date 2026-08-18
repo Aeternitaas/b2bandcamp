@@ -37,7 +37,7 @@ export function ShareLinks() {
       await api.revokeShareLink(playlistId)
       setShares((prev) => prev.filter((s) => s.playlist_id !== playlistId))
       setConfirming(null)
-      setStatus('Link revoked — anyone holding it has lost access.')
+      setStatus('Link revoked, anyone holding it has lost access.')
     } catch (e) {
       setError((e as Error).message)
     } finally {
@@ -47,7 +47,7 @@ export function ShareLinks() {
 
   const copy = useCallback(async (token: string) => {
     const ok = await copyText(`${window.location.origin}/s/${token}`)
-    setStatus(ok ? 'Link copied.' : 'Copy failed — select the link and copy it manually.')
+    setStatus(ok ? 'Link copied.' : 'Copy failed, select the link and copy it manually.')
   }, [])
 
   return (
@@ -122,7 +122,7 @@ export function ShareLinks() {
 
       <span className="faint small">
         Revoking a link takes effect immediately. Collaborators already added by name keep their
-        access — remove them from the playlist's settings.
+        access, remove them from the playlist's settings.
       </span>
     </div>
   )

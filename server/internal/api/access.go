@@ -21,11 +21,11 @@ type perms struct {
 // collaborator) or a share token supplied in the X-Share-Token header. The
 // visibility setting decides how far a share token goes:
 //
-//	private — the token is inert; only the owner and invited collaborators.
-//	shared  — the token admits anyone, but editing requires signing in, so the
-//	          owner can see and revoke individual collaborators.
-//	public  — anyone may view without a token (these are listed on the owner's
-//	          profile); the token additionally grants editing, no account needed.
+//	private: the token is inert; only the owner and invited collaborators.
+//	shared:  the token admits anyone, but editing requires signing in, so the
+//	         owner can see and revoke individual collaborators.
+//	public:  anyone may view without a token (these are listed on the owner's
+//	         profile); the token additionally grants editing, no account needed.
 func (s *Server) access(r *http.Request, playlistID int64) (*store.Playlist, perms, error) {
 	ctx := r.Context()
 

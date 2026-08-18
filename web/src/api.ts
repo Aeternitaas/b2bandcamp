@@ -236,7 +236,7 @@ export const api = {
 
   /**
    * Same audio, relayed same-origin so Web Audio may read the samples.
-   * Only used when the analysis panel is open — see the Go handler for why.
+   * Only used when the analysis panel is open, see the Go handler for why.
    */
   audioUrl: (trackId: number, bandId: number) =>
     `/api/bc/audio/${trackId}?band_id=${bandId}`,

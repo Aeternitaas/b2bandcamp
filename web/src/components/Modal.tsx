@@ -15,7 +15,7 @@ export function Modal({ title, onClose, children, footer }: Props) {
 
   // Callers pass an inline arrow for onClose, so its identity changes on every
   // parent render. Reading it through a ref keeps the setup effect's deps empty
-  // — otherwise the effect would tear down and re-run on each keystroke, and
+  //, otherwise the effect would tear down and re-run on each keystroke, and
   // the focus() call below would yank focus out of whatever field is being
   // typed into.
   const onCloseRef = useRef(onClose)

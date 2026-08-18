@@ -7,7 +7,7 @@ import (
 )
 
 // CreateAPIToken records a new token's hash against a user. The caller is
-// responsible for generating and returning the raw token — the store only
+// responsible for generating and returning the raw token, the store only
 // ever sees (and stores) its hash.
 func (s *Store) CreateAPIToken(ctx context.Context, userID int64, tokenHash, label string) (*APIToken, error) {
 	now := time.Now().UTC()
@@ -25,7 +25,7 @@ func (s *Store) CreateAPIToken(ctx context.Context, userID int64, tokenHash, lab
 }
 
 // UserByAPIToken resolves a token hash to its owner. Unlike a session, an API
-// token does not expire on its own — see the 014_api_tokens migration for why.
+// token does not expire on its own, see the 014_api_tokens migration for why.
 func (s *Store) UserByAPIToken(ctx context.Context, tokenHash string) (*User, error) {
 	return scanUser(s.DB.QueryRowContext(ctx,
 		`SELECT `+userColumns+`
@@ -33,7 +33,7 @@ func (s *Store) UserByAPIToken(ctx context.Context, tokenHash string) (*User, er
 		  WHERE t.token_hash = ?`, tokenHash))
 }
 
-// TouchAPIToken records that a token was just used, best-effort — callers
+// TouchAPIToken records that a token was just used, best-effort, callers
 // should not fail a request over this bookkeeping write.
 func (s *Store) TouchAPIToken(ctx context.Context, tokenHash string) error {
 	_, err := s.DB.ExecContext(ctx,
@@ -41,7 +41,7 @@ func (s *Store) TouchAPIToken(ctx context.Context, tokenHash string) error {
 	return err
 }
 
-// ListAPITokens returns a user's tokens, newest first, for the account page —
+// ListAPITokens returns a user's tokens, newest first, for the account page,
 // never the raw token, which cannot be recovered once issued.
 func (s *Store) ListAPITokens(ctx context.Context, userID int64) ([]*APIToken, error) {
 	rows, err := s.DB.QueryContext(ctx,

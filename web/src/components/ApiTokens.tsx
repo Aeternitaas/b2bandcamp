@@ -4,7 +4,7 @@ import { Icon } from './Icon'
 import type { ApiToken } from '../types'
 
 /**
- * Every bearer token issued to a non-browser client — the Chrome extension
+ * Every bearer token issued to a non-browser client, the Chrome extension
  * signs in this way, since it has nowhere to hold a session cookie. Tokens
  * are created by that sign-in, not from here; this is only for reviewing
  * what has access and revoking a token that is lost or no longer trusted.
@@ -35,7 +35,7 @@ export function ApiTokens() {
       await api.revokeApiToken(id)
       setTokens((prev) => prev.filter((t) => t.id !== id))
       setConfirming(null)
-      setStatus('Token revoked — anything using it will need to sign in again.')
+      setStatus('Token revoked, anything using it will need to sign in again.')
     } catch (e) {
       setError((e as Error).message)
     } finally {
@@ -103,7 +103,7 @@ export function ApiTokens() {
       )}
 
       <span className="faint small">
-        Each token grants full access to your playlists, same as signing in — revoke one the
+        Each token grants full access to your playlists, same as signing in, revoke one the
         moment you stop trusting whatever holds it.
       </span>
     </div>

@@ -8,7 +8,7 @@ import (
 )
 
 // playlistHub fans out a "something changed" signal to everyone currently
-// watching a playlist's track list. It carries no payload and no history — a
+// watching a playlist's track list. It carries no payload and no history, a
 // client that receives a signal just refetches the track list itself, so a
 // coalesced or dropped signal is harmless, and the hub never has to agree
 // with the database about what actually changed.
@@ -58,8 +58,8 @@ func (h *playlistHub) broadcast(playlistID int64) {
 // handleTrackEvents streams a signal over Server-Sent Events every time this
 // playlist's track list changes, so an open tab updates without polling.
 //
-// View access is enough to subscribe — the stream carries no data, only a
-// cue to refetch — but subscribing still goes through the session cookie
+// View access is enough to subscribe, the stream carries no data, only a
+// cue to refetch, but subscribing still goes through the session cookie
 // only: EventSource cannot attach the X-Share-Token header a guest link
 // relies on, so anonymous share-link viewers keep the plain fetch-on-load
 // behavior instead of live updates.

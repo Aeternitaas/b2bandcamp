@@ -50,7 +50,7 @@ interface Props {
  * One track.
  *
  * Two shapes: a column grid on wide screens, and on phones a compact row where
- * the metadata collapses onto a second line — a phone has no room for six
+ * the metadata collapses onto a second line, a phone has no room for six
  * columns, and shrinking them all just makes everything unreadable.
  */
 export function TrackRow(props: Props) {
@@ -204,7 +204,7 @@ export function TrackRow(props: Props) {
           <span className="track-title truncate">{number}. {track.title}</span>
 
           {/* Artist shares the second line with the column values rather than
-              taking a line of its own — three stacked lines makes for a very
+              taking a line of its own, three stacked lines makes for a very
               tall row on a phone. It truncates so the chips stay visible. */}
           <span className="track-meta-line" onClick={stop}>
             <span className="track-sub truncate meta-artist">{track.artist}</span>

@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # ---------------------------------------------------------------------------
-# Stage 1 — build the React app.
+# Stage 1: build the React app.
 # The frontend is built entirely on its own: it has no knowledge of Go and
 # produces plain static files. That is what keeps the two halves decoupled.
 # ---------------------------------------------------------------------------
@@ -19,7 +19,7 @@ RUN npm run build
 
 
 # ---------------------------------------------------------------------------
-# Stage 2 — build the Go server.
+# Stage 2: build the Go server.
 # ---------------------------------------------------------------------------
 FROM golang:1.23-alpine AS server
 
@@ -38,7 +38,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
 
 
 # ---------------------------------------------------------------------------
-# Stage 3 — runtime.
+# Stage 3: runtime.
 # ---------------------------------------------------------------------------
 FROM alpine:3.20
 

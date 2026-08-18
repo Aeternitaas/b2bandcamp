@@ -8,6 +8,32 @@ const errorEl = $('error');
 
 let pendingInstanceUrl = '';
 
+/**
+ * Normalises whatever the user typed ("b2b.example.com", "example.com/",
+ * "http://example.com") into a bare origin, mirrors background.js's own
+ * copy: the background service worker cannot request the permission this
+ * needs (see ensureOriginPermission below), so the popup must normalise
+ * and request it itself, before the origin ever reaches background.js.
+ */
+function normalizeInstanceUrl(input) {
+  let value = input.trim();
+  if (!/^https?:\/\//i.test(value)) value = `https://${value}`;
+  return new URL(value).origin;
+}
+
+/**
+ * Requests the host permission a fetch to this origin needs. Must run here,
+ * synchronously within a click handler: chrome.permissions.request() only
+ * works with an active user gesture, and only a page context (this popup)
+ * has one, the background service worker never does, even when a message
+ * it's handling was itself triggered by a click a moment ago.
+ */
+async function ensureOriginPermission(origin) {
+  const pattern = `${origin}/*`;
+  if (await chrome.permissions.contains({ origins: [pattern] })) return true;
+  return chrome.permissions.request({ origins: [pattern] });
+}
+
 function showError(message) {
   errorEl.textContent = message;
   errorEl.classList.remove('hidden');
@@ -16,7 +42,7 @@ function clearError() {
   errorEl.classList.add('hidden');
 }
 
-/** Every call to the background worker goes through this — see
+/** Every call to the background worker goes through this, see
  *  background.js's handlers map for what `type` values exist. */
 function send(type, payload = {}) {
   return new Promise((resolve, reject) => {
@@ -63,9 +89,14 @@ $('connect-btn').addEventListener('click', () => withButton($('connect-btn'), as
   const instanceUrl = $('instance-url').value.trim();
   if (!instanceUrl) throw new Error('Enter your instance URL first.');
 
-  const { origin } = await send('ping', { instanceUrl });
+  const origin = normalizeInstanceUrl(instanceUrl);
+  if (!(await ensureOriginPermission(origin))) {
+    throw new Error('Permission to reach that site was not granted.');
+  }
+
+  await send('ping', { instanceUrl: origin });
   pendingInstanceUrl = origin;
-  $('connected-to').textContent = `Connected to ${origin} — sign in below.`;
+  $('connected-to').textContent = `Connected to ${origin}, sign in below.`;
   stepInstance.classList.add('hidden');
   stepLogin.classList.remove('hidden');
 }));
@@ -80,6 +111,10 @@ $('login-btn').addEventListener('click', () => withButton($('login-btn'), async 
   const login = $('login-input').value.trim();
   const password = $('password-input').value;
   if (!login || !password) throw new Error('Enter your username/email and password.');
+
+  if (!(await ensureOriginPermission(pendingInstanceUrl))) {
+    throw new Error('Permission to reach that site was not granted.');
+  }
 
   await send('login', { instanceUrl: pendingInstanceUrl, login, password });
   $('password-input').value = '';

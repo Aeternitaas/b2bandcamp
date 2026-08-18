@@ -2,7 +2,7 @@
  * Inline icon set.
  *
  * Paths are from Feather Icons (MIT licensed, https://feathericons.com), copied
- * in rather than loaded from a CDN — the app's Content-Security-Policy allows
+ * in rather than loaded from a CDN, the app's Content-Security-Policy allows
  * no external scripts or stylesheets, and the PWA has to render offline.
  *
  * Emoji are deliberately not used anywhere in the UI: their glyphs are supplied

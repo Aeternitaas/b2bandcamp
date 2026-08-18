@@ -14,7 +14,7 @@ interface Props {
 }
 
 /**
- * An album's track list, expanded inline under its row in the wishlist —
+ * An album's track list, expanded inline under its row in the wishlist,
  * fetched once on expansion, not up front, since a wishlist page can hold
  * dozens of albums. Browsing and previewing a release no longer means
  * navigating away from the list (and losing your scroll position doing so);
@@ -90,7 +90,7 @@ export function WishlistAlbumTracks({ item, canEdit, preview, onTrackPreviewed, 
               }}
               disabled={!t.streamable}
               aria-label={`Preview ${t.title}`}
-              title={t.streamable ? 'Preview — press again to skip ahead' : 'Not streamable'}
+              title={t.streamable ? 'Preview, press again to skip ahead' : 'Not streamable'}
             >
               {t.art_url || detail.art_url
                 ? <img src={t.art_url || detail.art_url} alt="" loading="lazy" />

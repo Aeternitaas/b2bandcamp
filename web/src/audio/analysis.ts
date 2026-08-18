@@ -15,7 +15,7 @@ export interface TempoResult {
 export interface KeyResult {
   /** e.g. "F# minor" */
   name: string
-  /** Camelot wheel notation, e.g. "11A" — what DJs actually match on. */
+  /** Camelot wheel notation, e.g. "11A", what DJs actually match on. */
   camelot: string
   tonic: string
   /** Pitch class of the tonic, 0 = C. Kept so the key can be transposed. */
@@ -69,7 +69,7 @@ export function computePeaks(samples: Float32Array, buckets: number): Float32Arr
  * Onset-strength envelope via spectral flux.
  *
  * Summing the positive frame-to-frame change across all spectral bins responds
- * to any percussive event — a hi-hat shows up even under a loud sustained bass
+ * to any percussive event, a hi-hat shows up even under a loud sustained bass
  * note, where a broadband energy difference would miss it entirely. This is the
  * standard front end for tempo estimation (Ellis, "Beat Tracking by Dynamic
  * Programming", 2007).
@@ -111,7 +111,7 @@ function onsetEnvelope(samples: Float32Array, sampleRate: number): {
 
   // Mel bands rather than raw FFT bins. A 55 Hz kick spans about two of 512
   // linear bins and so contributes almost nothing to a bin-wise flux sum,
-  // which biases the envelope towards broadband snares — and snares typically
+  // which biases the envelope towards broadband snares, and snares typically
   // fall on every second beat, which is exactly how half-tempo errors arise.
   // Mel spacing gives the low end its own bands and restores the kick.
   const BANDS = 40
@@ -183,7 +183,7 @@ function onsetEnvelope(samples: Float32Array, sampleRate: number): {
  * Autocorrelating an onset envelope cannot by itself distinguish a beat from
  * its multiples: a 150 BPM track with snares on 2 and 4 correlates most
  * strongly at 75. A log-Gaussian prior over tempo, applied across the whole
- * curve before peak-picking, resolves that — measuring on-beat against
+ * curve before peak-picking, resolves that, measuring on-beat against
  * off-beat onset strength was tried first and discarded, because the two are
  * indistinguishable in practice (both sit near 0.5).
  */
@@ -275,11 +275,11 @@ export function detectTempo(samples: Float32Array, sampleRate: number): TempoRes
  * The previous version summed every FFT bin's raw magnitude straight into
  * the pitch class nearest its rounded frequency. That works on an isolated
  * sine wave, but real instruments are harmonic-rich, and every one of a
- * note's overtones landed in whatever pitch class it happened to round to —
+ * note's overtones landed in whatever pitch class it happened to round to,
  * a single guitar note could spray energy across four or five unrelated
  * chroma bins. It also broke down at the low end: a 4096-point FFT has
  * ~10.8 Hz bins at 44.1kHz, wider than a semitone below about A2, so bass
- * content — usually the strongest cue to the tonic — was largely rounding
+ * content, usually the strongest cue to the tonic, was largely rounding
  * noise. Folding each peak across its candidate fundamentals (this is the
  * HPCP approach: Gómez, "Tonal Description of Music Audio Signals", 2006)
  * fixes both: a note's own harmonics reinforce its true pitch class instead
@@ -305,14 +305,14 @@ export function detectKey(samples: Float32Array, sampleRate: number): KeyResult 
 
   const chroma = new Float64Array(12)
   // A second, low-register-only chroma. Krumhansl–Kessler correlation alone
-  // cannot separate a relative major and minor — they share all seven notes,
-  // so their rotated profiles differ only in shading — but in most tonal
+  // cannot separate a relative major and minor, they share all seven notes,
+  // so their rotated profiles differ only in shading, but in most tonal
   // music the tonic sits under the harmony far more than plain chroma credits
   // it for. Below here is roughly the top of a bassline in popular and
   // electronic music, clear of a chord's upper voicing.
   const bassChroma = new Float64Array(12)
   const BASS_MAX_HZ = 250
-  // Weight falls off close to 1/h for most acoustic and synthesized tones —
+  // Weight falls off close to 1/h for most acoustic and synthesized tones,
   // not exact for any one instrument, but a reasonable stand-in across a
   // catalogue this varied.
   const MAX_HARMONIC = 8
@@ -333,7 +333,7 @@ export function detectKey(samples: Float32Array, sampleRate: number): KeyResult 
     }
     if (frameMax <= 0) { analysed++; continue }
 
-    // Local maxima well above the frame's noise floor — everything else is
+    // Local maxima well above the frame's noise floor, everything else is
     // spectral leakage, not a note.
     const threshold = frameMax * 0.05
     for (let k = minBin; k <= maxBin; k++) {
@@ -341,7 +341,7 @@ export function detectKey(samples: Float32Array, sampleRate: number): KeyResult 
       if (m < threshold || m < mag[k - 1] || m < mag[k + 1]) continue
 
       // Quadratic interpolation of the log-magnitude around the peak refines
-      // its frequency to sub-bin accuracy — the fix for bins being coarser
+      // its frequency to sub-bin accuracy, the fix for bins being coarser
       // than a semitone in the low register.
       const a = Math.log(mag[k - 1] + 1e-9)
       const b = Math.log(m + 1e-9)
@@ -411,7 +411,7 @@ export function detectKey(samples: Float32Array, sampleRate: number): KeyResult 
  * Changing playback rate without pitch correction resamples the audio, so
  * frequency scales with the rate and the shift is 12·log2(rate): 2x is exactly
  * an octave, and 2^(1/12) is one semitone. With pitch correction on, the
- * browser time-stretches instead and the pitch — and therefore the key — is
+ * browser time-stretches instead and the pitch, and therefore the key, is
  * unchanged.
  */
 export function semitonesForRate(rate: number): number {
@@ -440,7 +440,7 @@ export function transposeKey(key: KeyResult, semitones: number): KeyResult {
 /**
  * How far the shifted pitch sits from the nearest semitone, in cents. The rate
  * slider is continuous, so most settings land between semitones and the
- * transposed key is only an approximation — this says by how much.
+ * transposed key is only an approximation, this says by how much.
  */
 export function centsOffset(semitones: number): number {
   return Math.round((semitones - Math.round(semitones)) * 100)
@@ -483,7 +483,7 @@ function pitchClassOf(freq: number): number {
 /**
  * Spreads weight across the two chroma bins nearest a fractional pitch class
  * instead of rounding to one. Hard rounding means a note a few cents off the
- * tuning grid — routine on a real recording — can flip which bin it lands in
+ * tuning grid, routine on a real recording, can flip which bin it lands in
  * outright; splitting it proportionally keeps a small tuning or analysis
  * error a small error in the chroma too.
  */

@@ -21,7 +21,7 @@ const check = (name, ok, detail) => {
 /**
  * A realistic drum pattern: kick every beat, snare on 2 and 4, offbeat hats.
  * The snare accent every second beat is what pulls naive detectors to half
- * tempo — this pattern at 150 BPM used to report 75.
+ * tempo, this pattern at 150 BPM used to report 75.
  */
 function drumPattern(bpm, seconds = 20) {
   const n = SR * seconds
@@ -46,7 +46,7 @@ function drumPattern(bpm, seconds = 20) {
   return x
 }
 
-/** Sparse and genuinely slow — the case a strong tempo prior could wrongly double. */
+/** Sparse and genuinely slow, the case a strong tempo prior could wrongly double. */
 function slowPattern(bpm, seconds = 20) {
   const n = SR * seconds
   const x = new Float32Array(n)
@@ -82,7 +82,7 @@ function chord(freqs, seconds = 12) {
 }
 
 /**
- * A harmonic-rich tone — fundamental plus overtones decaying like a real
+ * A harmonic-rich tone, fundamental plus overtones decaying like a real
  * instrument, not a bare sine. A pure tone cannot expose chroma smearing
  * from overtones landing in the wrong pitch class, which is exactly the
  * failure mode real (harmonically rich) recordings hit.
@@ -110,8 +110,8 @@ function harmonicChord(freqs, seconds = 12, harmonics = 6) {
 /**
  * Equal-energy notes of a scale shared by a relative major/minor pair, plus
  * one note sustained an octave-and-more below as a bassline would sit. Pitch-
- * class content alone cannot tell C major from A minor here — they are the
- * same seven notes — so this isolates whether the bass emphasis actually
+ * class content alone cannot tell C major from A minor here, they are the
+ * same seven notes, so this isolates whether the bass emphasis actually
  * breaks the tie.
  */
 function scaleWithBass(bassFreq, scaleFreqs, seconds = 12) {
@@ -167,7 +167,7 @@ const ebmajHarm = detectKey(harmonicChord([155.56, 196.0, 233.08]), SR) // Eb G 
 check('Eb major triad, harmonic timbre', ebmajHarm?.name === 'D# major', `got ${ebmajHarm?.name} ${ebmajHarm?.camelot}`)
 
 console.log('relative major/minor disambiguation via bass register:')
-// C D E F G A B — the seven notes C major and A minor both use, so chroma
+// C D E F G A B, the seven notes C major and A minor both use, so chroma
 // content alone is symmetric between the two; only the bass should decide it.
 const sharedScale = [261.63, 293.66, 329.63, 349.23, 392.0, 440.0, 493.88]
 const withCBass = detectKey(scaleWithBass(65.41, sharedScale), SR) // C2

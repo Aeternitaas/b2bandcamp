@@ -79,7 +79,7 @@ func (s *Server) handleGetPlaylist(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleUpdatePlaylist(w http.ResponseWriter, r *http.Request) {
 	// Title, description, cover and the wishlist source are collaborative
-	// edits; visibility is not — only the owner controls who gets in.
+	// edits; visibility is not, only the owner controls who gets in.
 	p, pr, ok := s.requireEdit(w, r)
 	if !ok {
 		return
@@ -389,8 +389,8 @@ func (s *Server) handleUpdateTrack(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, http.StatusBadRequest, "added_by must be a user id or null")
 			return
 		}
-		// Reassignment is only ever to the owner or an invited collaborator —
-		// never an arbitrary account — so attribution can't be used to credit
+		// Reassignment is only ever to the owner or an invited collaborator,
+		// never an arbitrary account, so attribution can't be used to credit
 		// (or blame) someone with no relationship to this playlist.
 		if userID != nil {
 			allowed := *userID == p.OwnerID

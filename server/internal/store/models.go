@@ -26,9 +26,9 @@ type APIToken struct {
 
 // Visibility controls who may edit a playlist.
 //
-//	private — owner only; the share link is inert.
-//	shared  — owner plus users who have opened the share link while signed in.
-//	public  — anyone holding the share link, signed in or not.
+//	private: owner only; the share link is inert.
+//	shared:  owner plus users who have opened the share link while signed in.
+//	public:  anyone holding the share link, signed in or not.
 type Visibility string
 
 const (
@@ -103,7 +103,7 @@ type Track struct {
 }
 
 // TrackAnalysis is the cached result of analysing one Bandcamp track. Peaks are
-// stored as one byte per bucket — the waveform is drawn a few pixels tall, so
+// stored as one byte per bucket, the waveform is drawn a few pixels tall, so
 // 8 bits of amplitude is plenty and keeps a row well under a kilobyte.
 type TrackAnalysis struct {
 	TrackID         int64     `json:"bc_track_id"`

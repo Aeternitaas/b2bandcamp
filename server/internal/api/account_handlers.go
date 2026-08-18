@@ -117,7 +117,7 @@ func (s *Server) handleUpdateAccount(w http.ResponseWriter, r *http.Request) {
 // handleLinkBandcamp associates a Bandcamp profile with the account, optionally
 // adopting that profile's picture as the avatar.
 //
-// This is a claim, not a proof — nothing here verifies the person actually owns
+// This is a claim, not a proof, nothing here verifies the person actually owns
 // the Bandcamp profile, and it grants no privileges. It exists so contributions
 // can be attributed with a recognisable face.
 func (s *Server) handleLinkBandcamp(w http.ResponseWriter, r *http.Request) {

@@ -17,7 +17,7 @@ interface Props {
  * Expanded view of one Bandcamp album or track, with a preview available
  * before committing to adding anything: the whole release can be added with
  * a single button, or individual songs previewed and picked off one at a
- * time. Shared by every "look at this release" entry point in the app —
+ * time. Shared by every "look at this release" entry point in the app,
  * search results and a pasted link both land here.
  */
 export function TralbumPanel({ type, id, bandId, onAdd, onBack }: Props) {
@@ -104,7 +104,7 @@ export function TralbumPanel({ type, id, bandId, onAdd, onBack }: Props) {
               trackUrl: streamable[0].track_url,
             })}
             aria-label={`Preview ${detail.title}`}
-            title="Preview — press again to skip ahead"
+            title="Preview, press again to skip ahead"
           >
             {detail.art_url
               ? <img src={detail.art_url} alt="" loading="lazy" />
@@ -173,7 +173,7 @@ export function TralbumPanel({ type, id, bandId, onAdd, onBack }: Props) {
                   })}
                   disabled={!t.streamable}
                   aria-label={`Preview ${t.title}`}
-                  title={t.streamable ? 'Preview — press again to skip ahead' : 'Not streamable'}
+                  title={t.streamable ? 'Preview, press again to skip ahead' : 'Not streamable'}
                 >
                   {t.art_url || detail.art_url
                     ? <img src={t.art_url || detail.art_url} alt="" loading="lazy" />

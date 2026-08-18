@@ -51,7 +51,7 @@ const MAX_WIDTH = 220
 const STORAGE_KEY = 'b2bandcamp:columns:v5'
 
 // BPM sits to the left of the time, which is the order these are read in when
-// beat-matching. Notes trails Time; "Added on" trails "Added by" — who, then
+// beat-matching. Notes trails Time; "Added on" trails "Added by", who, then
 // when.
 const DEFAULT_COLUMNS: ColumnConfig[] = [
   { key: 'bpm', visible: true, width: 62 },
@@ -165,7 +165,7 @@ export function TrackColumnHeader({
   ) => {
     // Pointer id 0 (used here previously) does not belong to any real
     // pointer, so this threw InvalidPointerId and aborted before the drag
-    // listeners below were ever attached — resizing did nothing, silently,
+    // listeners below were ever attached, resizing did nothing, silently,
     // for every column. try/catch is still worth keeping: capture is a nice-
     // to-have (keeps the drag tracking even if the pointer strays outside the
     // handle), not a requirement, since the actual move/up listeners are on
@@ -173,7 +173,7 @@ export function TrackColumnHeader({
     try {
       target.setPointerCapture?.(pointerId)
     } catch {
-      // ignored — the window-level listeners below work without it
+      // ignored, the window-level listeners below work without it
     }
 
     const onMove = (e: PointerEvent) => {
@@ -246,7 +246,7 @@ export function TrackColumnHeader({
         <button
           className="track-head-label sortable"
           onClick={() => onSort?.('position')}
-          title="Track number — click to sort"
+          title="Track number, click to sort"
         >
           #
           {sort?.key === 'position' && (
@@ -273,8 +273,8 @@ export function TrackColumnHeader({
             onPointerDown={(e) => startDrag(i, e)}
             onClick={() => { if (SORTABLE.includes(col.key)) onSort?.(col.key) }}
             title={SORTABLE.includes(col.key)
-              ? `${COLUMN_LABELS[col.key]} — click to sort, drag to move`
-              : `${COLUMN_LABELS[col.key]} — drag to move`}
+              ? `${COLUMN_LABELS[col.key]}, click to sort, drag to move`
+              : `${COLUMN_LABELS[col.key]}, drag to move`}
           >
             {COLUMN_LABELS[col.key]}
             {sort?.key === col.key && (

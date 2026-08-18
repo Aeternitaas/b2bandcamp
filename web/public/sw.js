@@ -43,7 +43,7 @@ self.addEventListener('fetch', (event) => {
   // Same-origin only; Bandcamp art and audio go straight to the network.
   if (url.origin !== self.location.origin) return
 
-  // Never intercept the API — including the stream redirect endpoint.
+  // Never intercept the API, including the stream redirect endpoint.
   if (url.pathname.startsWith('/api/')) return
 
   // Navigations: network first so deploys are picked up, cached shell as the

@@ -14,8 +14,8 @@ interface Props {
 /**
  * Musical key as `CAMELOT (Key)`, e.g. `8A (Am)`.
  *
- * Camelot leads because harmonic mixing is done on it — adjacent numbers are
- * compatible keys — with the conventional name in brackets. Detection is a
+ * Camelot leads because harmonic mixing is done on it, adjacent numbers are
+ * compatible keys, with the conventional name in brackets. Detection is a
  * heuristic, so like tempo the value is always hand-correctable; anything that
  * is not a real wheel position is rejected rather than stored.
  */
@@ -84,7 +84,7 @@ export function KeyCell({ camelot, keyName, overridden, editable, onSave }: Prop
       className={`key-cell${camelot ? '' : ' empty'}${overridden ? ' overridden' : ''}`}
       onClick={(e) => { e.stopPropagation(); begin() }}
       disabled={!editable || busy}
-      title={overridden ? `Manually set — ${name || camelot}` : name || undefined}
+      title={overridden ? `Manually set, ${name || camelot}` : name || undefined}
     >
       {busy ? <div className="spin" /> : camelot ? (
         <>
@@ -96,7 +96,7 @@ export function KeyCell({ camelot, keyName, overridden, editable, onSave }: Prop
   )
 }
 
-/** "A# minor" -> "Bbm", "C major" -> "C" — the notation DJs actually write. */
+/** "A# minor" -> "Bbm", "C major" -> "C", the notation DJs actually write. */
 function shortKey(name: string): string {
   const [tonic, scale] = name.split(' ')
   if (!tonic) return name

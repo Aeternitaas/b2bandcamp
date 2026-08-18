@@ -13,7 +13,7 @@ interface Props {
   onClearFilter: () => void
   /**
    * Who this track can be reassigned to. Omitted (rather than empty) when
-   * reassigning isn't allowed here at all — the contributor-filter strip at
+   * reassigning isn't allowed here at all, the contributor-filter strip at
    * the top of the playlist reuses this menu for a whole contributor, not one
    * track, so it never passes this.
    */
@@ -24,7 +24,7 @@ interface Props {
 /**
  * The contributor avatar on a track row, with a menu for acting on that person.
  *
- * Opens on hover for pointer users and on click/tap for everyone — hover alone
+ * Opens on hover for pointer users and on click/tap for everyone, hover alone
  * would leave the menu unreachable on a phone, which is the primary target here.
  */
 export function ContributorMenu({
@@ -82,7 +82,7 @@ export function ContributorMenu({
         className="contributor-trigger"
         onClick={(e) => { e.stopPropagation(); toggle() }}
         aria-haspopup="menu"
-        aria-label={`Added by ${label} — show options`}
+        aria-label={`Added by ${label}, show options`}
         title={`Added by ${label}`}
       >
         <Avatar name={name} avatarUrl={avatarUrl} userId={userId} size={24} />

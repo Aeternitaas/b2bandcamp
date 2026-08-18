@@ -58,7 +58,7 @@ func (l *limiter) allow(key string) bool {
 // clientIP identifies the caller for rate-limiting purposes.
 //
 // X-Forwarded-For is only consulted when the immediate peer is a configured
-// trusted proxy — the header is trivially forged, so believing it from an
+// trusted proxy, the header is trivially forged, so believing it from an
 // arbitrary client would let anyone sidestep the limiters entirely by sending a
 // different value each request. Conversely, ignoring it behind a real proxy
 // lumps every user into one bucket, so one person's failed logins would lock

@@ -1,5 +1,5 @@
 /* ==========================================================================
-   b2b helper — mobile-first, monospaced.
+   b2b helper, mobile-first, monospaced.
    Layout is designed for a phone first; wider breakpoints add columns rather
    than rearranging, so behaviour stays predictable across sizes.
    ========================================================================== */
@@ -407,7 +407,7 @@ button.icon { min-height: 36px; padding: 6px 8px; }
   padding: 6px 0 6px 10px;
   border-left: 2px solid var(--border);
 }
-/* The inner .popover-tracks list is already its own scroll region — this
+/* The inner .popover-tracks list is already its own scroll region, this
    just gives it a bit more room to work with than the floating popover
    version needs. */
 .wish-album-tracks .popover-tracks { max-height: 340px; }
@@ -455,7 +455,7 @@ button.icon { min-height: 36px; padding: 6px 8px; }
   flex: 0 0 auto;
 }
 
-/* The elapsed/total readout is the first thing to go on a narrow phone —
+/* The elapsed/total readout is the first thing to go on a narrow phone,
    the seek bar already communicates progress. */
 .player-time { min-width: 78px; text-align: right; }
 
@@ -768,7 +768,7 @@ input[type='checkbox'] { width: auto; height: auto; }
 
 /* Positioned in fixed viewport coordinates, computed in JS from the
    trigger's own bounding rect (see WishlistAlbumMenu) rather than anchored
-   to any ancestor here — the trigger sits near this row's right edge, often
+   to any ancestor here, the trigger sits near this row's right edge, often
    with little room to either side, and a plain CSS anchor either overflowed
    the sidebar's left edge or (anchored to the row instead) ballooned the
    hover-bridge below into covering the whole row. Existence in the DOM is
@@ -833,7 +833,7 @@ input[type='checkbox'] { width: auto; height: auto; }
 .track-head-label:hover:not(:disabled) { background: none; color: var(--dim); }
 .track-head-label:active { cursor: grabbing; }
 
-/* Invisible until approached — the grid lines should not compete with the
+/* Invisible until approached, the grid lines should not compete with the
    music, but the affordance has to be findable. */
 .col-resize {
   position: absolute;
@@ -994,7 +994,7 @@ input[type='checkbox'] { width: auto; height: auto; }
   top: calc(100% + 6px);
 }
 
-/* The tempo and key readouts are small numbers — on a wide screen they should
+/* The tempo and key readouts are small numbers, on a wide screen they should
    sit compactly beside the slider rather than stretching across the bar. */
 .analysis-row .stat {
   flex: 0 0 auto;
@@ -1304,7 +1304,7 @@ input[type='checkbox'] { width: auto; height: auto; }
   .sidebar { width: 100vw; }
 
   /* Menus that hang off a row would overflow a narrow viewport. .add-choice-
-     popover is excluded — it computes safe, clamped viewport coordinates in
+     popover is excluded, it computes safe, clamped viewport coordinates in
      JS (see WishlistAlbumMenu) that already account for a narrow screen. */
   .contributor-popover {
     position: fixed;
@@ -1413,7 +1413,7 @@ input[type='checkbox'] { width: auto; height: auto; }
 .track-meta-line .meta-chip { flex: 0 0 auto; }
 
 /* ==========================================================================
-   Player bar — one fixed-height row
+   Player bar, one fixed-height row
    ==========================================================================
    Everything lives on a single line, so the bar never changes height and the
    page's bottom padding never has to move. As width shrinks, the least

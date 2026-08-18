@@ -15,7 +15,7 @@ const MOVE_TOLERANCE = 10
  * Long-press plus tap on one element.
  *
  * Touch devices have no room for a permanent checkbox column, so selection is
- * entered by holding a row — the convention every mobile list uses. The
+ * entered by holding a row, the convention every mobile list uses. The
  * movement tolerance is what keeps a scroll gesture from being read as a hold,
  * which is the failure mode that makes hand-rolled long-press feel broken.
  */

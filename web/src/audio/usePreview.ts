@@ -17,7 +17,7 @@ export interface PreviewSource {
 }
 
 /**
- * Preview playback for things that are not in a playlist yet — wishlist items
+ * Preview playback for things that are not in a playlist yet, wishlist items
  * and album listings.
  *
  * Pressing once starts the track; pressing again scrubs forward by a sixth,
@@ -75,7 +75,7 @@ export function usePreview() {
 
   /**
    * Stops playback if what is playing is an ephemeral preview. Leaves a real
-   * playlist track alone — closing the wishlist should not interrupt listening
+   * playlist track alone, closing the wishlist should not interrupt listening
    * that was already under way.
    */
   const stopPreview = useCallback(() => {

@@ -22,7 +22,7 @@ const (
 
 func (s *Server) withMiddleware(h http.Handler) http.Handler {
 	// withUser runs before withCSRF so a bearer-authenticated request can be
-	// exempted from the CSRF check (see withCSRF) — that decision needs to
+	// exempted from the CSRF check (see withCSRF), that decision needs to
 	// know how the caller authenticated, which is only known once withUser
 	// has run.
 	return s.logRequests(s.securityHeaders(s.withUser(s.withCSRF(h))))
@@ -34,7 +34,7 @@ func (s *Server) withMiddleware(h http.Handler) http.Handler {
 //
 // Two credential forms are accepted: the session cookie the web app uses, and
 // an "Authorization: Bearer <token>" header for clients that cannot hold a
-// cookie — the browser extension (see docs/API.md). The header is checked
+// cookie, the browser extension (see docs/API.md). The header is checked
 // first; a request presenting both is unusual enough that which one wins is
 // not worth over-specifying.
 func (s *Server) withUser(next http.Handler) http.Handler {
@@ -50,7 +50,7 @@ func (s *Server) withUser(next http.Handler) http.Handler {
 				return
 			}
 			// Best-effort and off the request's own context, which is
-			// cancelled the moment the response is written — this write
+			// cancelled the moment the response is written, this write
 			// should not race that.
 			go func() {
 				if err := s.st.TouchAPIToken(context.Background(), hash); err != nil {
@@ -151,8 +151,8 @@ func (s *Server) withCSRF(next http.Handler) http.Handler {
 		case authenticatedByBearer(r.Context()):
 			// A CSRF token defends against a browser silently attaching
 			// ambient credentials (the session cookie) to a request the
-			// user never made. A bearer token is never ambient — the
-			// caller has to already hold it and set the header itself —
+			// user never made. A bearer token is never ambient, the
+			// caller has to already hold it and set the header itself,
 			// so a third-party page cannot forge this request regardless
 			// of CSRF protection either way.
 		case r.URL.Path == "/api/auth/tokens" && r.Method == http.MethodPost:
@@ -203,7 +203,7 @@ func (w *statusRecorder) WriteHeader(code int) {
 }
 
 // Unwrap lets http.ResponseController reach the underlying ResponseWriter's
-// Flush (used by the SSE stream in events.go) — embedding the
+// Flush (used by the SSE stream in events.go), embedding the
 // http.ResponseWriter interface only promotes the methods that interface
 // declares, which does not include Flush.
 func (w *statusRecorder) Unwrap() http.ResponseWriter {

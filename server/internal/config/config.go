@@ -80,7 +80,7 @@ func Load() (*Config, error) {
 }
 
 // parseTrustedProxies accepts a comma-separated list of CIDRs or bare IPs, or
-// the keyword "private" for the usual RFC1918 and loopback ranges — which is
+// the keyword "private" for the usual RFC1918 and loopback ranges, which is
 // what a proxy on the same host or docker network will be.
 func parseTrustedProxies(raw string) ([]*net.IPNet, error) {
 	raw = strings.TrimSpace(raw)

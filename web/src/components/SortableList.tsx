@@ -22,8 +22,8 @@ interface Props<T> {
    */
   selectedKeys?: Set<string | number>
   /**
-   * Handles something dropped in from outside the list — a link dragged in
-   * from the browser's address bar or another tab — at the position it was
+   * Handles something dropped in from outside the list, a link dragged in
+   * from the browser's address bar or another tab, at the position it was
    * dropped, reusing the same "which row's midpoint did this cross" logic
    * that dragging an existing row to reorder it already relies on.
    */
@@ -176,7 +176,7 @@ export function SortableList<T>({
               onKeyDown: (e) => onHandleKey(index, e),
               tabIndex: disabled ? -1 : 0,
               role: 'button',
-              'aria-label': 'Reorder — drag, or focus and use arrow keys',
+              'aria-label': 'Reorder, drag, or focus and use arrow keys',
             },
           })}
         </div>
