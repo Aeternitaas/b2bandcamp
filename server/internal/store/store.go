@@ -171,22 +171,6 @@ ALTER TABLE playlist_tracks
 ALTER TABLE playlist_tracks
   ADD COLUMN key_override VARCHAR(8) NULL AFTER bpm`},
 
-	// Before tempo detection and manual overrides were separated, analysis wrote
-	// its results straight into playlist_tracks.bpm. Those rows now render as
-	// though a person had typed them, which is wrong and misleading.
-	//
-	// Two signatures identify an auto-written value: it matches the cached
-	// detection for that track, or it has a fractional part — the detector
-	// reports one decimal place, while a person types a whole number. This runs
-	// once, so it cannot affect anything entered from here on.
-	{"012_clear_auto_bpm_overrides", `
-UPDATE playlist_tracks t
-  LEFT JOIN track_analysis a ON a.bc_track_id = t.bc_track_id
-   SET t.bpm = NULL
- WHERE t.bpm IS NOT NULL
-   AND ((a.bpm IS NOT NULL AND ABS(t.bpm - a.bpm) < 0.05)
-        OR t.bpm <> ROUND(t.bpm))`},
-
 	// Cached audio analysis, keyed by Bandcamp track id rather than by playlist
 	// row: the audio for a given track is identical wherever it appears, so one
 	// analysis serves every playlist and every user. analyzer_version lets a
@@ -206,6 +190,22 @@ CREATE TABLE IF NOT EXISTS track_analysis (
   analyzed_at      DATETIME        NOT NULL,
   PRIMARY KEY (bc_track_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`},
+
+	// Before tempo detection and manual overrides were separated, analysis wrote
+	// its results straight into playlist_tracks.bpm. Those rows now render as
+	// though a person had typed them, which is wrong and misleading.
+	//
+	// Two signatures identify an auto-written value: it matches the cached
+	// detection for that track, or it has a fractional part — the detector
+	// reports one decimal place, while a person types a whole number. This runs
+	// once, so it cannot affect anything entered from here on.
+	{"012_clear_auto_bpm_overrides", `
+UPDATE playlist_tracks t
+  LEFT JOIN track_analysis a ON a.bc_track_id = t.bc_track_id
+   SET t.bpm = NULL
+ WHERE t.bpm IS NOT NULL
+   AND ((a.bpm IS NOT NULL AND ABS(t.bpm - a.bpm) < 0.05)
+        OR t.bpm <> ROUND(t.bpm))`},
 }
 
 func (s *Store) migrate(ctx context.Context) error {

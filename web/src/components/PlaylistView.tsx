@@ -13,11 +13,12 @@ import { TrackRow } from './TrackRow'
 import { useCompactLayout } from '../hooks/useMediaQuery'
 import { PlaylistSettings } from './PlaylistSettings'
 import { SortableList } from './SortableList'
-import { WishlistSidebar } from './WishlistSidebar'
+import { EMPTY_WISHLIST_CACHE, WishlistSidebar } from './WishlistSidebar'
+import type { WishlistCache } from './WishlistSidebar'
 import { usePlayer } from '../state/player'
 import { analyzeTrack } from '../audio/analyzeTrack'
 import { formatTotal, playlistCover } from '../utils'
-import type { Fan, Playlist, Track, TrackRef } from '../types'
+import type { Collaborator, Playlist, Track, TrackRef } from '../types'
 
 /** The key to show: a hand-entered override wins over what analysis found. */
 export function effectiveKey(track: Track): string {
@@ -84,8 +85,10 @@ export function PlaylistView({
   const [showSettings, setShowSettings] = useState(false)
   const [showWishlist, setShowWishlist] = useState(false)
   // Kept here rather than on the playlist: the wishlist source is a browsing
-  // aid for this session, not part of the playlist's saved state.
-  const [wishlistFan, setWishlistFan] = useState<Fan | null>(null)
+  // aid for this session, not part of the playlist's saved state. Held above
+  // the sidebar itself so closing and reopening it does not lose what was
+  // already loaded.
+  const [wishlistCache, setWishlistCache] = useState<WishlistCache>(EMPTY_WISHLIST_CACHE)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -101,6 +104,32 @@ export function PlaylistView({
   // Contributors whose tracks are hidden. Storing the exclusions rather than
   // the inclusions means people who add tracks later show up by default.
   const [hidden, setHidden] = useState<Set<string>>(new Set())
+  // Who a track's attribution can be reassigned to. Fetched at view level
+  // (not per-row) since every row offers the same playlist-wide list.
+  const [collaborators, setCollaborators] = useState<Collaborator[]>([])
+  useEffect(() => {
+    let cancelled = false
+    api.collaborators(playlist.id)
+      .then((res) => { if (!cancelled) setCollaborators(res.collaborators) })
+      .catch(() => {}) // the menu just offers no reassignment options
+    return () => { cancelled = true }
+  }, [playlist.id])
+
+  // Live updates from other collaborators. The stream carries no payload —
+  // just a cue to refetch — so it stays correct no matter what changed.
+  // Share-link guests are excluded: EventSource cannot carry the
+  // X-Share-Token header their access depends on, only the session cookie,
+  // so they keep the plain fetch-on-load behavior instead.
+  useEffect(() => {
+    if (shareMode) return
+    const source = new EventSource(`/api/playlists/${playlist.id}/events`)
+    source.onmessage = () => {
+      api.getPlaylist(playlist.id)
+        .then((res) => onTracksChange(res.tracks ?? []))
+        .catch(() => {}) // a dropped refetch just waits for the next signal
+    }
+    return () => source.close()
+  }, [playlist.id, shareMode, onTracksChange])
 
   const isOwner = playlist.role === 'owner'
   const cover = useMemo(() => playlistCover(playlist, tracks, 9), [playlist, tracks])
@@ -357,6 +386,23 @@ export function PlaylistView({
     }
   }, [onTracksChange])
 
+  const changeOwner = useCallback(async (track: Track, collaborator: Collaborator) => {
+    try {
+      await api.updateTrack(playlist.id, track.id, { added_by: collaborator.user_id })
+      onTracksChange((prev) => prev.map((t) => (
+        t.id === track.id
+          ? {
+              ...t,
+              added_by: collaborator.user_id,
+              added_by_name: collaborator.username,
+              added_by_avatar: collaborator.avatar_url,
+            }
+          : t)))
+    } catch (e) {
+      setError((e as Error).message)
+    }
+  }, [playlist.id, onTracksChange])
+
   const saveKey = useCallback(async (track: Track, camelot: string) => {
     try {
       await api.updateTrack(playlist.id, track.id, { key_override: camelot })
@@ -449,7 +495,7 @@ export function PlaylistView({
         )}
 
         <button onClick={() => setShowWishlist(true)}>
-          <Icon name="heart" size={14} /> Wishlist{wishlistFan ? `: ${wishlistFan.username}` : ''}
+          <Icon name="heart" size={14} /> Wishlist{wishlistCache.fan ? `: ${wishlistCache.fan.username}` : ''}
         </button>
 
         {contributors.length > 1 && (
@@ -651,6 +697,12 @@ export function PlaylistView({
                   && hidden.size === contributors.length - 1,
                 onIsolate: () => isolateContributor(contributorKey(track)),
                 onClearFilter: () => setHidden(new Set()),
+                // Reassignment is only offered where it can actually be
+                // saved, and only to someone other than the current owner.
+                reassignable: canEdit
+                  ? collaborators.filter((c) => c.user_id !== track.added_by)
+                  : undefined,
+                onChangeOwner: (collaborator) => changeOwner(track, collaborator),
               }}
             />
           )}
@@ -686,8 +738,8 @@ export function PlaylistView({
       {showWishlist && (
         <WishlistSidebar
           canEdit={canEdit}
-          fan={wishlistFan}
-          onFanChange={setWishlistFan}
+          cache={wishlistCache}
+          onCacheChange={setWishlistCache}
           onClose={() => setShowWishlist(false)}
           onAdd={addRefs}
         />

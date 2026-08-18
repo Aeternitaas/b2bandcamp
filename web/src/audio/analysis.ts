@@ -266,23 +266,56 @@ export function detectTempo(samples: Float32Array, sampleRate: number): TempoRes
 }
 
 /**
- * Estimates musical key by building a chroma profile (energy per pitch class)
- * and correlating it against all 24 major/minor key profiles.
+ * Estimates musical key from a Harmonic Pitch Class Profile (HPCP): spectral
+ * peaks are picked and frequency-refined per frame, then each peak's energy
+ * is folded across the pitch classes its likely subharmonics would occupy,
+ * before the resulting chroma is correlated against Krumhansl–Kessler key
+ * profiles.
+ *
+ * The previous version summed every FFT bin's raw magnitude straight into
+ * the pitch class nearest its rounded frequency. That works on an isolated
+ * sine wave, but real instruments are harmonic-rich, and every one of a
+ * note's overtones landed in whatever pitch class it happened to round to —
+ * a single guitar note could spray energy across four or five unrelated
+ * chroma bins. It also broke down at the low end: a 4096-point FFT has
+ * ~10.8 Hz bins at 44.1kHz, wider than a semitone below about A2, so bass
+ * content — usually the strongest cue to the tonic — was largely rounding
+ * noise. Folding each peak across its candidate fundamentals (this is the
+ * HPCP approach: Gómez, "Tonal Description of Music Audio Signals", 2006)
+ * fixes both: a note's own harmonics reinforce its true pitch class instead
+ * of each casting an independent, wrong vote, and parabolic interpolation of
+ * the peak recovers sub-bin frequency accuracy cheaply, without a bigger FFT.
  */
 export function detectKey(samples: Float32Array, sampleRate: number): KeyResult | null {
   const fftSize = 4096
   const hop = 2048
   if (samples.length < fftSize) return null
 
-  const chroma = new Float64Array(12)
   const window = hannWindow(fftSize)
   const re = new Float64Array(fftSize)
   const im = new Float64Array(fftSize)
 
-  // Only bins between roughly A1 and C7 carry useful pitch information; below
-  // that is bass rumble, above it is mostly cymbals and noise.
-  const minBin = Math.max(1, Math.floor((55 * fftSize) / sampleRate))
-  const maxBin = Math.min(fftSize / 2, Math.ceil((2100 * fftSize) / sampleRate))
+  // Peaks are hunted across a wider band than a chroma bin could ever occupy:
+  // a cymbal-range peak at 4 kHz can still be the 8th harmonic of a bass note,
+  // and folding it down is exactly what recovers that note. This range
+  // matches the default most HPCP implementations use.
+  const minBin = Math.max(2, Math.floor((40 * fftSize) / sampleRate))
+  const maxBin = Math.min(fftSize / 2 - 2, Math.ceil((5000 * fftSize) / sampleRate))
+  const mag = new Float64Array(maxBin + 2)
+
+  const chroma = new Float64Array(12)
+  // A second, low-register-only chroma. Krumhansl–Kessler correlation alone
+  // cannot separate a relative major and minor — they share all seven notes,
+  // so their rotated profiles differ only in shading — but in most tonal
+  // music the tonic sits under the harmony far more than plain chroma credits
+  // it for. Below here is roughly the top of a bassline in popular and
+  // electronic music, clear of a chord's upper voicing.
+  const bassChroma = new Float64Array(12)
+  const BASS_MAX_HZ = 250
+  // Weight falls off close to 1/h for most acoustic and synthesized tones —
+  // not exact for any one instrument, but a reasonable stand-in across a
+  // catalogue this varied.
+  const MAX_HARMONIC = 8
 
   let analysed = 0
   for (let start = 0; start + fftSize <= samples.length; start += hop) {
@@ -292,35 +325,77 @@ export function detectKey(samples: Float32Array, sampleRate: number): KeyResult 
     }
     fft(re, im)
 
-    for (let bin = minBin; bin < maxBin; bin++) {
-      const magnitude = Math.sqrt(re[bin] * re[bin] + im[bin] * im[bin])
-      if (magnitude <= 0) continue
-      const freq = (bin * sampleRate) / fftSize
-      // MIDI note number, then fold to a pitch class. 69 = A4 = 440 Hz.
-      const midi = 69 + 12 * Math.log2(freq / 440)
-      const pitchClass = ((Math.round(midi) % 12) + 12) % 12
-      chroma[pitchClass] += magnitude
+    let frameMax = 0
+    for (let k = minBin; k <= maxBin + 1; k++) {
+      const m = Math.sqrt(re[k] * re[k] + im[k] * im[k])
+      mag[k] = m
+      if (m > frameMax) frameMax = m
+    }
+    if (frameMax <= 0) { analysed++; continue }
+
+    // Local maxima well above the frame's noise floor — everything else is
+    // spectral leakage, not a note.
+    const threshold = frameMax * 0.05
+    for (let k = minBin; k <= maxBin; k++) {
+      const m = mag[k]
+      if (m < threshold || m < mag[k - 1] || m < mag[k + 1]) continue
+
+      // Quadratic interpolation of the log-magnitude around the peak refines
+      // its frequency to sub-bin accuracy — the fix for bins being coarser
+      // than a semitone in the low register.
+      const a = Math.log(mag[k - 1] + 1e-9)
+      const b = Math.log(m + 1e-9)
+      const c = Math.log(mag[k + 1] + 1e-9)
+      const denom = a - 2 * b + c
+      const offset = denom !== 0 ? (0.5 * (a - c)) / denom : 0
+      const freq = ((k + offset) * sampleRate) / fftSize
+      if (freq <= 0) continue
+
+      const weight = Math.log1p(m)
+      if (freq < BASS_MAX_HZ) addToChroma(bassChroma, pitchClassOf(freq), weight)
+
+      for (let h = 1; h <= MAX_HARMONIC; h++) {
+        const subFreq = freq / h
+        if (subFreq < 25) break
+        addToChroma(chroma, pitchClassOf(subFreq), weight / h)
+      }
     }
     analysed++
   }
   if (analysed === 0) return null
 
+  let bassPeak = 0
+  for (let i = 0; i < 12; i++) if (bassChroma[i] > bassPeak) bassPeak = bassChroma[i]
+  if (bassPeak > 0) for (let i = 0; i < 12; i++) bassChroma[i] /= bassPeak
+
+  // How far the bass gets to nudge the major/minor tie-break. Kept small
+  // relative to the correlation's [-1, 1] range so it settles a close call
+  // rather than overriding a clear chroma-profile match.
+  const BASS_WEIGHT = 0.25
+
   let best: KeyResult | null = null
+  let bestScore = -Infinity
   for (let tonic = 0; tonic < 12; tonic++) {
     for (const scale of ['major', 'minor'] as const) {
       const profile = scale === 'major' ? MAJOR_PROFILE : MINOR_PROFILE
       const rotated = new Array(12)
       for (let i = 0; i < 12; i++) rotated[i] = profile[(i - tonic + 12) % 12]
 
-      const score = pearson(Array.from(chroma), rotated)
-      if (!best || score > best.confidence) {
+      const corr = pearson(Array.from(chroma), rotated)
+      const score = corr + BASS_WEIGHT * bassChroma[tonic]
+      if (score > bestScore) {
+        bestScore = score
         best = {
           name: `${NOTE_NAMES[tonic]} ${scale}`,
           camelot: scale === 'major' ? CAMELOT_MAJOR[tonic] : CAMELOT_MINOR[tonic],
           tonic: NOTE_NAMES[tonic],
           tonicIndex: tonic,
           scale,
-          confidence: score,
+          // Reported separately from the score the bass nudged: confidence
+          // describes how well the chroma itself matches a key, so a tie
+          // broken by bass emphasis should not read as more certain than the
+          // chroma match actually was.
+          confidence: corr,
         }
       }
     }
@@ -397,6 +472,28 @@ function hannWindow(size: number): Float64Array {
   const w = new Float64Array(size)
   for (let i = 0; i < size; i++) w[i] = 0.5 * (1 - Math.cos((2 * Math.PI * i) / (size - 1)))
   return w
+}
+
+/** Fractional pitch class (0–12, C = 0) for a frequency. 69 = A4 = 440 Hz. */
+function pitchClassOf(freq: number): number {
+  const midi = 69 + 12 * Math.log2(freq / 440)
+  return ((midi % 12) + 12) % 12
+}
+
+/**
+ * Spreads weight across the two chroma bins nearest a fractional pitch class
+ * instead of rounding to one. Hard rounding means a note a few cents off the
+ * tuning grid — routine on a real recording — can flip which bin it lands in
+ * outright; splitting it proportionally keeps a small tuning or analysis
+ * error a small error in the chroma too.
+ */
+function addToChroma(chroma: Float64Array, pitchClass: number, weight: number): void {
+  const lo = Math.floor(pitchClass)
+  const frac = pitchClass - lo
+  const i0 = lo % 12
+  const i1 = (i0 + 1) % 12
+  chroma[i0] += weight * (1 - frac)
+  chroma[i1] += weight * frac
 }
 
 function pearson(a: number[], b: number[]): number {

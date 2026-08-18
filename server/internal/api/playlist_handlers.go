@@ -281,6 +281,7 @@ func (s *Server) handleAddTracks(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
+	s.hub.broadcast(p.ID)
 	writeJSON(w, http.StatusOK, map[string]any{"added": n, "tracks": tracks})
 }
 
@@ -298,11 +299,12 @@ func (s *Server) handleDeleteTrack(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
+	s.hub.broadcast(p.ID)
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
-// handleUpdateTrack currently carries only the tempo, which the client fills in
-// after analysing the audio or the user corrects by hand.
+// handleUpdateTrack applies hand-entered corrections to one playlist row: a
+// tempo or key override, or reassigning who gets credit for adding it.
 func (s *Server) handleUpdateTrack(w http.ResponseWriter, r *http.Request) {
 	p, _, ok := s.requireEdit(w, r)
 	if !ok {
@@ -322,7 +324,7 @@ func (s *Server) handleUpdateTrack(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for field := range raw {
-		if field != "bpm" && field != "key_override" {
+		if field != "bpm" && field != "key_override" && field != "added_by" {
 			writeErr(w, http.StatusBadRequest, "unknown field "+field)
 			return
 		}
@@ -365,6 +367,37 @@ func (s *Server) handleUpdateTrack(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if value, present := raw["added_by"]; present {
+		var userID *int64
+		if err := json.Unmarshal(value, &userID); err != nil {
+			writeErr(w, http.StatusBadRequest, "added_by must be a user id or null")
+			return
+		}
+		// Reassignment is only ever to the owner or an invited collaborator —
+		// never an arbitrary account — so attribution can't be used to credit
+		// (or blame) someone with no relationship to this playlist.
+		if userID != nil {
+			allowed := *userID == p.OwnerID
+			if !allowed {
+				var err error
+				allowed, err = s.st.IsCollaborator(r.Context(), p.ID, *userID)
+				if err != nil {
+					fail(w, err)
+					return
+				}
+			}
+			if !allowed {
+				writeErr(w, http.StatusBadRequest, "added_by must be the playlist owner or an invited collaborator")
+				return
+			}
+		}
+		if err := s.st.SetTrackAddedBy(r.Context(), p.ID, trackRowID, userID); err != nil {
+			fail(w, err)
+			return
+		}
+	}
+
+	s.hub.broadcast(p.ID)
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
@@ -401,6 +434,7 @@ func (s *Server) handleDeleteTracks(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
+	s.hub.broadcast(p.ID)
 	writeJSON(w, http.StatusOK, map[string]any{"removed": removed, "tracks": tracks})
 }
 
@@ -431,6 +465,7 @@ func (s *Server) handleReorderTracks(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
+	s.hub.broadcast(p.ID)
 	writeJSON(w, http.StatusOK, map[string]any{"tracks": tracks})
 }
 

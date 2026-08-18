@@ -137,8 +137,8 @@ export const api = {
     playlistId: number,
     trackRowId: number,
     // Fields are applied only when present, so updating one override leaves
-    // the other untouched.
-    patch: { bpm?: number | null; key_override?: string | null },
+    // the others untouched.
+    patch: { bpm?: number | null; key_override?: string | null; added_by?: number | null },
   ) =>
     request<{ ok: boolean }>(`/api/playlists/${playlistId}/tracks/${trackRowId}`,
       { method: 'PATCH', body: body(patch) }),

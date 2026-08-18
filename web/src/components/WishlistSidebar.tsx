@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import type { Dispatch, SetStateAction } from 'react'
 import { api } from '../api'
 import { TralbumPanel } from './TralbumPanel'
 import { WishlistAlbumMenu } from './WishlistAlbumMenu'
@@ -7,12 +8,22 @@ import { useAuth } from '../state/auth'
 import type { Fan, TrackRef, WishlistItem } from '../types'
 import { Icon } from './Icon'
 
+/** Everything about the last-loaded wishlist, held by the parent so it
+ *  survives the panel closing and reopening — closing this panel is meant to
+ *  be dismissal, not a reason to lose what was already fetched. */
+export interface WishlistCache {
+  fan: Fan | null
+  items: WishlistItem[]
+  token: string
+  more: boolean
+}
+
+export const EMPTY_WISHLIST_CACHE: WishlistCache = { fan: null, items: [], token: '', more: false }
+
 interface Props {
   canEdit: boolean
-  /** Held by the parent so the chosen user survives closing and reopening the
-   *  panel, but it is never sent to the server — the choice is per-session. */
-  fan: Fan | null
-  onFanChange: (fan: Fan | null) => void
+  cache: WishlistCache
+  onCacheChange: Dispatch<SetStateAction<WishlistCache>>
   onClose: () => void
   onAdd: (refs: TrackRef[]) => Promise<void>
 }
@@ -23,10 +34,8 @@ type Expanded = { type: 'a' | 't'; id: number; bandId: number; title: string }
  * Browse any Bandcamp user's wishlist and pull releases into the playlist.
  * Albums can be added whole, or opened to pick individual songs.
  */
-export function WishlistSidebar({ canEdit, fan, onFanChange, onClose, onAdd }: Props) {
-  const [items, setItems] = useState<WishlistItem[]>([])
-  const [token, setToken] = useState('')
-  const [more, setMore] = useState(false)
+export function WishlistSidebar({ canEdit, cache, onCacheChange, onClose, onAdd }: Props) {
+  const { fan, items, token, more } = cache
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [expanded, setExpanded] = useState<Expanded | null>(null)
@@ -45,15 +54,18 @@ export function WishlistSidebar({ canEdit, fan, onFanChange, onClose, onAdd }: P
     setError('')
     try {
       const page = await api.wishlist(fanId, nextToken)
-      setItems((prev) => (replace ? page.items : [...prev, ...page.items]))
-      setToken(page.last_token)
-      setMore(page.more_available)
+      onCacheChange((prev) => ({
+        ...prev,
+        items: replace ? page.items : [...prev.items, ...page.items],
+        token: page.last_token,
+        more: page.more_available,
+      }))
     } catch (e) {
       setError((e as Error).message)
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [onCacheChange])
 
   const lookupName = useCallback(async (name: string) => {
     if (!name) return
@@ -62,17 +74,22 @@ export function WishlistSidebar({ canEdit, fan, onFanChange, onClose, onAdd }: P
     setError('')
     try {
       const found = await api.fan(name)
-      onFanChange(found)
-      setItems([])
+      onCacheChange((prev) => ({ ...prev, fan: found, items: [], token: '', more: false }))
       setAdded(new Set())
       await loadPage(found.fan_id, '', true)
     } catch (e) {
       setError((e as Error).message)
-      onFanChange(null)
+      onCacheChange((prev) => ({ ...prev, fan: null }))
     } finally {
       setLooking(false)
     }
-  }, [loadPage, onFanChange])
+  }, [loadPage, onCacheChange])
+
+  /** Re-fetches the current fan's wishlist from scratch — for picking up a
+   *  track added on Bandcamp since it was last loaded. */
+  const reload = useCallback(() => {
+    if (fan) void loadPage(fan.fan_id, '', true)
+  }, [fan, loadPage])
 
   const lookup = useCallback(() => lookupName(input.trim()), [lookupName, input])
 
@@ -135,8 +152,7 @@ export function WishlistSidebar({ canEdit, fan, onFanChange, onClose, onAdd }: P
   }
 
   const clearFan = () => {
-    onFanChange(null)
-    setItems([])
+    onCacheChange({ fan: null, items: [], token: '', more: false })
     // Prefill with the linked account rather than clearing to nothing, so the
     // usual next action is one click.
     setInput(linked)
@@ -160,9 +176,20 @@ export function WishlistSidebar({ canEdit, fan, onFanChange, onClose, onAdd }: P
             {expanded ? expanded.title : fan ? `${fan.username}'s wishlist` : 'Browse a wishlist'}
           </h2>
           {fan && !expanded && (
-            <button className="ghost icon" onClick={clearFan} aria-label="Choose a different user">
-              change
-            </button>
+            <>
+              <button
+                className="ghost icon"
+                onClick={reload}
+                disabled={loading}
+                aria-label={`Reload ${fan.username}'s wishlist`}
+                title="Reload — pick up anything added on Bandcamp since this last loaded"
+              >
+                <Icon name="rotate-ccw" size={13} />
+              </button>
+              <button className="ghost icon" onClick={clearFan} aria-label="Choose a different user">
+                change
+              </button>
+            </>
           )}
           <button className="ghost icon" onClick={close} aria-label="Close wishlist"><Icon name="x" /></button>
         </div>

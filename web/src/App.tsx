@@ -1,5 +1,6 @@
 import { Link, Navigate, Route, Routes } from 'react-router-dom'
 import { Player } from './components/Player'
+import { Icon } from './components/Icon'
 import { SettingsPage } from './pages/SettingsPage'
 import { AuthPage } from './pages/AuthPage'
 import { PlaylistPage } from './pages/PlaylistPage'
@@ -19,15 +20,25 @@ function Header() {
           <Link to="/" className="ghost icon" style={{ display: 'inline-flex', alignItems: 'center' }}>
             Playlists
           </Link>
+          <div>|</div>
           <Link to="/settings" className="ghost icon" style={{ display: 'inline-flex', alignItems: 'center' }}>
             Settings
           </Link>
+          <div>|</div>
           <button className="ghost icon" onClick={() => void logout()}>Sign out</button>
         </>
       ) : (
         <Link to="/" className="small">Sign in</Link>
       )}
     </header>
+  )
+}
+
+function Footer() {
+  return (
+    <footer className="footer">
+      Built with   <Icon name="heart" size={12} className="footer-heart" label="love" />   by Sola Lang
+    </footer>
   )
 }
 
@@ -54,6 +65,7 @@ export default function App() {
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        <Footer />
       </main>
       <Player />
     </div>

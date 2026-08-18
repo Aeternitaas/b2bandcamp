@@ -125,7 +125,8 @@ type ShareLink struct {
 }
 
 type Collaborator struct {
-	UserID   int64     `json:"user_id"`
-	Username string    `json:"username"`
-	AddedAt  time.Time `json:"added_at"`
+	UserID    int64     `json:"user_id"`
+	Username  string    `json:"username"`
+	AvatarURL string    `json:"avatar_url"`
+	AddedAt   time.Time `json:"added_at"`
 }

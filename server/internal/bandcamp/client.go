@@ -201,7 +201,18 @@ func (c *Client) Search(ctx context.Context, query, filter string) ([]*SearchRes
 		sr := &SearchResult{
 			Type: r.Type, ID: r.ID, Name: r.Name, BandID: r.BandID,
 			BandName: r.BandName, AlbumName: r.AlbumName, Location: r.Location,
-			Username: r.Username, ArtURL: r.Img,
+			Username: r.Username,
+		}
+		// Track and album results carry an art_id, and the CDN requires an "a"
+		// prefix on the id for that size — which the "img" field this same
+		// response hands back omits, 404ing. Band/label results have no
+		// art_id, only an img_id for their photo, and that one's "img" field
+		// is already correctly formed, so it is fine to use as-is.
+		switch {
+		case r.ArtID != nil:
+			sr.ArtURL = ArtURL(*r.ArtID, 3)
+		default:
+			sr.ArtURL = r.Img
 		}
 		if sr.URL = r.ItemURLPath; sr.URL == "" {
 			sr.URL = r.ItemURLRoot

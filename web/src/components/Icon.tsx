@@ -15,7 +15,7 @@ export type IconName =
   | 'skip-back' | 'skip-forward' | 'sliders' | 'grip' | 'external-link'
   | 'check' | 'volume' | 'volume-low' | 'volume-mute' | 'plus'
   | 'arrow-left' | 'disc' | 'user' | 'chevron-down' | 'search'
-  | 'trash' | 'link' | 'edit' | 'activity' | 'list'
+  | 'trash' | 'link' | 'edit' | 'activity' | 'list' | 'rotate-ccw'
 
 interface Props {
   name: IconName
@@ -53,6 +53,7 @@ const PATHS: Record<IconName, JSX.Element> = {
   edit: <><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></>,
   activity: <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />,
   list: <><line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" /><line x1="8" y1="18" x2="21" y2="18" /><line x1="3" y1="6" x2="3.01" y2="6" /><line x1="3" y1="12" x2="3.01" y2="12" /><line x1="3" y1="18" x2="3.01" y2="18" /></>,
+  'rotate-ccw': <><polyline points="1 4 1 10 7 10" /><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" /></>,
 }
 
 export function Icon({ name, size = 16, label, className, strokeWidth = 2 }: Props) {

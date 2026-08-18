@@ -17,10 +17,11 @@ type Server struct {
 	cfg *config.Config
 	st  *store.Store
 	bc  *bandcamp.Client
+	hub *playlistHub
 }
 
 func NewServer(cfg *config.Config, st *store.Store, bc *bandcamp.Client) *Server {
-	return &Server{cfg: cfg, st: st, bc: bc}
+	return &Server{cfg: cfg, st: st, bc: bc, hub: newPlaylistHub()}
 }
 
 // Routes builds the API mux. Static file serving is layered on top in main.
@@ -52,6 +53,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/playlists/{id}/tracks/delete", s.handleDeleteTracks)
 	mux.HandleFunc("PATCH /api/playlists/{id}/tracks/{trackId}", s.handleUpdateTrack)
 	mux.HandleFunc("DELETE /api/playlists/{id}/tracks/{trackId}", s.handleDeleteTrack)
+	mux.HandleFunc("GET /api/playlists/{id}/events", s.handleTrackEvents)
 
 	// sharing + collaborators
 	mux.HandleFunc("GET /api/playlists/{id}/share", s.handleGetShareLink)

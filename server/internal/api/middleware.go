@@ -132,6 +132,14 @@ func (w *statusRecorder) WriteHeader(code int) {
 	w.ResponseWriter.WriteHeader(code)
 }
 
+// Unwrap lets http.ResponseController reach the underlying ResponseWriter's
+// Flush (used by the SSE stream in events.go) — embedding the
+// http.ResponseWriter interface only promotes the methods that interface
+// declares, which does not include Flush.
+func (w *statusRecorder) Unwrap() http.ResponseWriter {
+	return w.ResponseWriter
+}
+
 func (s *Server) logRequests(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()

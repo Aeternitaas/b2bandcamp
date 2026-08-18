@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../api'
 import { Modal } from './Modal'
 import { TralbumPanel } from './TralbumPanel'
+import { usePreview } from '../audio/usePreview'
 import { debounce, looksLikeBandcampUrl } from '../utils'
 import type { SearchResult, TrackRef } from '../types'
 import { Icon } from './Icon'
@@ -37,6 +38,14 @@ export function AddTracks({ onClose, onAdd, onAddUrl }: Props) {
 
   const inputRef = useRef<HTMLInputElement>(null)
   useEffect(() => { inputRef.current?.focus() }, [])
+
+  const preview = usePreview()
+  // Leaving the popup ends any preview it started; a half-heard track playing
+  // on from a search you have closed is just confusing.
+  const close = () => {
+    preview.stopPreview()
+    onClose()
+  }
 
   const isUrl = looksLikeBandcampUrl(query)
 
@@ -79,6 +88,42 @@ export function AddTracks({ onClose, onAdd, onAddUrl }: Props) {
     }
   }, [onAddUrl, query])
 
+  /** Albums have no audio of their own, so preview their first playable track. */
+  const previewResult = async (r: SearchResult) => {
+    try {
+      if (r.type === 't') {
+        preview.press({
+          trackId: r.id,
+          bandId: r.band_id ?? 0,
+          title: r.name,
+          artist: r.band_name ?? '',
+          trackUrl: r.url,
+        })
+        return
+      }
+
+      // Pressing again should scrub rather than refetch the album.
+      const detail = await api.details('a', r.id, r.band_id ?? 0)
+      const first = detail.tracks.find((t) => t.streamable)
+      if (!first) {
+        setError('No streamable tracks on this release.')
+        return
+      }
+      preview.press({
+        trackId: first.track_id,
+        bandId: first.band_id || (r.band_id ?? 0),
+        title: first.title,
+        artist: first.artist,
+        albumTitle: detail.title,
+        artId: first.art_id,
+        duration: first.duration,
+        trackUrl: first.track_url,
+      })
+    } catch (e) {
+      setError((e as Error).message)
+    }
+  }
+
   const pick = (r: SearchResult) => {
     if (r.type === 'b') {
       // An artist has no tracks of its own — search their catalogue instead.
@@ -91,7 +136,7 @@ export function AddTracks({ onClose, onAdd, onAddUrl }: Props) {
   }
 
   return (
-    <Modal title="Add music" onClose={onClose}>
+    <Modal title="Add music" onClose={close}>
       {selected ? (
         <TralbumPanel
           type={selected.type}
@@ -147,29 +192,50 @@ export function AddTracks({ onClose, onAdd, onAddUrl }: Props) {
           )}
 
           <div>
-            {results.map((r) => (
-              <button
-                key={`${r.type}-${r.id}`}
-                className="result-row ghost"
-                style={{ width: '100%', justifyContent: 'flex-start', textAlign: 'left', minHeight: 56 }}
-                onClick={() => pick(r)}
-              >
-                {r.art_url
-                  ? <img className="cover" style={{ width: 40, height: 40 }} src={r.art_url} alt="" loading="lazy" />
-                  : <div className="cover" style={{ width: 40, height: 40 }}><Icon name="music" size={18} /></div>}
+            {results.map((r) => {
+              const previewable = r.type === 'a' || r.type === 't'
+              return (
+                <div className="result-row" key={`${r.type}-${r.id}`}>
+                  {previewable ? (
+                    <button
+                      className="wish-art"
+                      style={{ width: 40, height: 40 }}
+                      onClick={() => void previewResult(r)}
+                      aria-label={`Preview ${r.name}`}
+                      title="Preview — press again to skip ahead"
+                    >
+                      {r.art_url
+                        ? <img src={r.art_url} alt="" loading="lazy" />
+                        : <Icon name="music" size={18} />}
+                      <span className="popover-art-overlay">
+                        <Icon name="play" size={12} />
+                      </span>
+                    </button>
+                  ) : (
+                    <div className="cover" style={{ width: 40, height: 40 }}>
+                      {r.art_url
+                        ? <img src={r.art_url} alt="" loading="lazy" />
+                        : <Icon name="music" size={18} />}
+                    </div>
+                  )}
 
-                <span className="track-meta">
-                  <span className="track-title truncate" style={{ display: 'block' }}>{r.name}</span>
-                  <span className="track-sub truncate" style={{ display: 'block' }}>
-                    {r.type === 'b' ? (r.location || 'Artist') : r.band_name}
+                  <button
+                    className="track-meta ghost"
+                    style={{ justifyContent: 'flex-start', textAlign: 'left', padding: 0, minHeight: 0, flex: 1 }}
+                    onClick={() => pick(r)}
+                  >
+                    <span className="track-title truncate" style={{ display: 'block' }}>{r.name}</span>
+                    <span className="track-sub truncate" style={{ display: 'block' }}>
+                      {r.type === 'b' ? (r.location || 'Artist') : r.band_name}
+                    </span>
+                  </button>
+
+                  <span className="badge">
+                    {r.type === 'a' ? 'album' : r.type === 't' ? 'track' : 'artist'}
                   </span>
-                </span>
-
-                <span className="badge">
-                  {r.type === 'a' ? 'album' : r.type === 't' ? 'track' : 'artist'}
-                </span>
-              </button>
-            ))}
+                </div>
+              )
+            })}
           </div>
         </div>
       )}

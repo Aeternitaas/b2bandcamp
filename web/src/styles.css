@@ -189,6 +189,18 @@ button.icon { min-height: 36px; padding: 6px 8px; }
   .main { padding: 24px 20px calc(var(--player-actual-h, var(--player-h)) + var(--safe-b) + 32px); }
 }
 
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  margin-top: 32px;
+  padding: 16px 0 0;
+  color: var(--faint);
+  font-size: 12px;
+}
+.footer-heart { color: var(--danger); }
+
 .card {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -1442,7 +1454,4 @@ input[type='checkbox'] { width: auto; height: auto; }
 .track-head-index { justify-content: flex-end; }
 .track-head-index .track-head-label {
   text-align: right;
-  /* Nudged in from the column edge: the heading glyph is narrower and lighter
-     than the digits below it, so a flush right edge reads as overhanging. */
-  padding-right: 4px;
 }

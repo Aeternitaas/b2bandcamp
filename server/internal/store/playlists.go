@@ -428,11 +428,22 @@ func (s *Store) SetTrackKey(ctx context.Context, playlistID, trackRowID int64, c
 	return err
 }
 
+// SetTrackAddedBy reassigns attribution for one playlist row, or clears it to
+// anonymous when userID is nil. The caller is responsible for checking that
+// userID actually belongs to this playlist (owner or collaborator) before
+// calling this — the update itself does not re-derive that.
+func (s *Store) SetTrackAddedBy(ctx context.Context, playlistID, trackRowID int64, userID *int64) error {
+	_, err := s.DB.ExecContext(ctx,
+		`UPDATE playlist_tracks SET added_by = ? WHERE id = ? AND playlist_id = ?`,
+		userID, trackRowID, playlistID)
+	return err
+}
+
 // ---------- collaborators ----------
 
 func (s *Store) Collaborators(ctx context.Context, playlistID int64) ([]*Collaborator, error) {
 	rows, err := s.DB.QueryContext(ctx,
-		`SELECT c.user_id, u.username, c.added_at
+		`SELECT c.user_id, u.username, COALESCE(u.avatar_url, ''), c.added_at
 		   FROM playlist_collaborators c JOIN users u ON u.id = c.user_id
 		  WHERE c.playlist_id = ? ORDER BY c.added_at ASC`, playlistID)
 	if err != nil {
@@ -443,7 +454,7 @@ func (s *Store) Collaborators(ctx context.Context, playlistID int64) ([]*Collabo
 	out := []*Collaborator{}
 	for rows.Next() {
 		var c Collaborator
-		if err := rows.Scan(&c.UserID, &c.Username, &c.AddedAt); err != nil {
+		if err := rows.Scan(&c.UserID, &c.Username, &c.AvatarURL, &c.AddedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, &c)

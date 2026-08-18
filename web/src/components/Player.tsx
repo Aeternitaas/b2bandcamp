@@ -75,9 +75,11 @@ export function Player() {
   if (!current) return null
 
 
-  // Pitch only moves when correction is off; with it on the browser
-  // time-stretches and the key is untouched.
-  const shift = player.preservePitch ? 0 : semitonesForRate(player.rate)
+  // The bar's key readout is a preview only: it always shows what the key
+  // would become at the current tempo, regardless of whether pitch
+  // correction (set from the full Now Playing view) is actually on. Nothing
+  // here commits — the audio element's real pitch handling is untouched.
+  const shift = semitonesForRate(player.rate)
   const shownKey = analysis.key && shift !== 0
     ? transposeKey(analysis.key, shift)
     : analysis.key
@@ -166,7 +168,7 @@ export function Player() {
           <div className={`p-tempo${compact && showAnalysis ? ' show' : ''}`}>
             <span className="p-stat-label">
               {percent >= 0 ? '+' : ''}{percent.toFixed(1)}%
-              {detune !== 0 && !player.preservePitch && (
+              {detune !== 0 && (
                 <span className="faint"> {detune > 0 ? '+' : ''}{detune}&#162;</span>
               )}
             </span>
@@ -183,14 +185,13 @@ export function Player() {
               aria-valuetext={`${percent >= 0 ? '+' : ''}${percent.toFixed(1)} percent`}
             />
             <button
-              className={player.preservePitch ? 'icon p-pitch' : 'ghost icon p-pitch'}
-              onClick={() => player.setPreservePitch(!player.preservePitch)}
-              aria-pressed={player.preservePitch}
-              title={player.preservePitch
-                ? 'Pitch is held steady as tempo changes'
-                : 'Pitch shifts with tempo, so the key moves'}
+              className="ghost icon p-pitch"
+              onClick={() => player.setRate(1)}
+              disabled={percent === 0}
+              aria-label="Reset tempo to 0%"
+              title="Reset tempo to 0%"
             >
-              key
+              <Icon name="rotate-ccw" size={14} />
             </button>
           </div>
 

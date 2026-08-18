@@ -71,6 +71,7 @@ export interface ShareLink {
 export interface Collaborator {
   user_id: number
   username: string
+  avatar_url: string
   added_at: string
 }
 

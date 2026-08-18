@@ -4,10 +4,10 @@ import { ContributorMenu } from './ContributorMenu'
 import { Icon } from './Icon'
 import { KeyCell } from './KeyCell'
 import { useRowGestures } from '../hooks/useRowGestures'
-import { artUrl, formatDuration } from '../utils'
+import { artUrl, formatAddedAgo, formatDuration } from '../utils'
 import type { ColumnConfig } from './trackColumns'
 import type { HandleProps } from './SortableList'
-import type { Track } from '../types'
+import type { Collaborator, Track } from '../types'
 
 interface Props {
   track: Track
@@ -34,7 +34,14 @@ interface Props {
   onSaveKey: (camelot: string) => Promise<void>
   onReanalyze?: () => Promise<void>
   analyzing?: boolean
-  contributorMenu: { isolated: boolean; onIsolate: () => void; onClearFilter: () => void }
+  contributorMenu: {
+    isolated: boolean
+    onIsolate: () => void
+    onClearFilter: () => void
+    /** Who this track can be reassigned to; omitted where reassigning isn't allowed. */
+    reassignable?: Collaborator[]
+    onChangeOwner: (collaborator: Collaborator) => void
+  }
 }
 
 /**
@@ -202,6 +209,9 @@ export function TrackRow(props: Props) {
               if (c.key === 'duration') {
                 return <span className="meta-chip faint" key="duration">{formatDuration(track.duration)}</span>
               }
+              if (c.key === 'addedOn') {
+                return <span className="meta-chip faint" key="addedOn">{formatAddedAgo(track.added_at)}</span>
+              }
               return null
             })}
           </span>
@@ -281,6 +291,13 @@ export function TrackRow(props: Props) {
         if (c.key === 'bpm') return bpmCell
         if (c.key === 'key') return keyCell
         if (c.key === 'duration') return <div className="track-dur" key="duration">{formatDuration(track.duration)}</div>
+        if (c.key === 'addedOn') {
+          return (
+            <div className="track-dur" key="addedOn" title={new Date(track.added_at).toLocaleString()}>
+              {formatAddedAgo(track.added_at)}
+            </div>
+          )
+        }
         return <div className="track-cell" key="contributor" onClick={stop}>{contributor}</div>
       })}
 

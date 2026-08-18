@@ -81,6 +81,51 @@ function chord(freqs, seconds = 12) {
   return x
 }
 
+/**
+ * A harmonic-rich tone — fundamental plus overtones decaying like a real
+ * instrument, not a bare sine. A pure tone cannot expose chroma smearing
+ * from overtones landing in the wrong pitch class, which is exactly the
+ * failure mode real (harmonically rich) recordings hit.
+ */
+function harmonicTone(freq, seconds, harmonics = 6) {
+  const n = SR * seconds
+  const x = new Float32Array(n)
+  for (let h = 1; h <= harmonics; h++) {
+    const amp = 1 / h
+    for (let i = 0; i < n; i++) x[i] += amp * Math.sin((2 * Math.PI * freq * h * i) / SR)
+  }
+  return x
+}
+
+function harmonicChord(freqs, seconds = 12, harmonics = 6) {
+  const n = SR * seconds
+  const x = new Float32Array(n)
+  for (const f of freqs) {
+    const tone = harmonicTone(f, seconds, harmonics)
+    for (let i = 0; i < n; i++) x[i] += tone[i] / freqs.length
+  }
+  return x
+}
+
+/**
+ * Equal-energy notes of a scale shared by a relative major/minor pair, plus
+ * one note sustained an octave-and-more below as a bassline would sit. Pitch-
+ * class content alone cannot tell C major from A minor here — they are the
+ * same seven notes — so this isolates whether the bass emphasis actually
+ * breaks the tie.
+ */
+function scaleWithBass(bassFreq, scaleFreqs, seconds = 12) {
+  const n = SR * seconds
+  const x = new Float32Array(n)
+  for (const f of scaleFreqs) {
+    const tone = harmonicTone(f, seconds, 4)
+    for (let i = 0; i < n; i++) x[i] += tone[i] / scaleFreqs.length
+  }
+  const bass = harmonicTone(bassFreq, seconds, 4)
+  for (let i = 0; i < n; i++) x[i] += bass[i] * 1.5
+  return x
+}
+
 console.log('tempo:')
 // 174 covers the 3:2 ambiguity and 128 the frame-quantisation limit; both
 // were real failures before the octave correction and parabolic refinement.
@@ -108,6 +153,29 @@ const cmaj = detectKey(chord([261.63, 329.63, 392.0]), SR)
 check('C major triad', cmaj?.name === 'C major' && cmaj?.camelot === '8B', `got ${cmaj?.name} ${cmaj?.camelot}`)
 const amin = detectKey(chord([220.0, 261.63, 329.63]), SR)
 check('A minor triad', amin?.name === 'A minor' && amin?.camelot === '8A', `got ${amin?.name} ${amin?.camelot}`)
+
+console.log('key on harmonic-rich tones (realistic timbre, not pure sines):')
+const cmajHarm = detectKey(harmonicChord([261.63, 329.63, 392.0]), SR)
+check('C major triad, harmonic timbre', cmajHarm?.name === 'C major' && cmajHarm?.camelot === '8B',
+  `got ${cmajHarm?.name} ${cmajHarm?.camelot}`)
+const aminHarm = detectKey(harmonicChord([220.0, 261.63, 329.63]), SR)
+check('A minor triad, harmonic timbre', aminHarm?.name === 'A minor' && aminHarm?.camelot === '8A',
+  `got ${aminHarm?.name} ${aminHarm?.camelot}`)
+const fmajHarm = detectKey(harmonicChord([174.61, 220.0, 261.63]), SR) // F A C
+check('F major triad, harmonic timbre', fmajHarm?.name === 'F major', `got ${fmajHarm?.name} ${fmajHarm?.camelot}`)
+const ebmajHarm = detectKey(harmonicChord([155.56, 196.0, 233.08]), SR) // Eb G Bb
+check('Eb major triad, harmonic timbre', ebmajHarm?.name === 'D# major', `got ${ebmajHarm?.name} ${ebmajHarm?.camelot}`)
+
+console.log('relative major/minor disambiguation via bass register:')
+// C D E F G A B — the seven notes C major and A minor both use, so chroma
+// content alone is symmetric between the two; only the bass should decide it.
+const sharedScale = [261.63, 293.66, 329.63, 349.23, 392.0, 440.0, 493.88]
+const withCBass = detectKey(scaleWithBass(65.41, sharedScale), SR) // C2
+check('shared scale + C bass -> C major', withCBass?.name === 'C major',
+  `got ${withCBass?.name} ${withCBass?.camelot}`)
+const withABass = detectKey(scaleWithBass(110.0, sharedScale), SR) // A2
+check('shared scale + A bass -> A minor', withABass?.name === 'A minor',
+  `got ${withABass?.name} ${withABass?.camelot}`)
 
 console.log('peaks:')
 const peaks = computePeaks(clickTrack(120, 5), 40)

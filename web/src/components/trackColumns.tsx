@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Icon } from './Icon'
 import { moveItem } from '../utils'
 
-export type ColumnKey = 'bpm' | 'key' | 'duration' | 'contributor'
+export type ColumnKey = 'bpm' | 'key' | 'duration' | 'contributor' | 'addedOn'
 
 export interface ColumnConfig {
   key: ColumnKey
@@ -15,6 +15,7 @@ export const COLUMN_LABELS: Record<ColumnKey, string> = {
   key: 'Key',
   duration: 'Time',
   contributor: 'Added by',
+  addedOn: 'Added on',
 }
 
 /** Columns whose heading can be clicked to sort. */
@@ -34,6 +35,7 @@ export const SORT_LABELS: Record<SortKey, string> = {
   key: 'Key',
   duration: 'Time',
   contributor: 'Added by',
+  addedOn: 'Added on',
 }
 
 /** Everything the user can sort by, in the order the controls present them. */
@@ -44,15 +46,16 @@ const MAX_WIDTH = 220
 // Versioned: widths are saved per browser, so a stored layout would otherwise
 // pin existing users to an old default forever. Bump this whenever a default
 // width changes, or the change will not reach anyone who has used the app.
-const STORAGE_KEY = 'b2bandcamp:columns:v3'
+const STORAGE_KEY = 'b2bandcamp:columns:v4'
 
 // BPM sits to the left of the time, which is the order these are read in when
-// beat-matching.
+// beat-matching. "Added on" trails "Added by" — who, then when.
 const DEFAULT_COLUMNS: ColumnConfig[] = [
   { key: 'bpm', visible: true, width: 62 },
   { key: 'key', visible: true, width: 62 },
   { key: 'duration', visible: true, width: 56 },
   { key: 'contributor', visible: true, width: 44 },
+  { key: 'addedOn', visible: true, width: 56 },
 ]
 
 function load(): ColumnConfig[] {
