@@ -17,6 +17,7 @@ Bandcamp's own playlist features.
 
 ```bash
 cp .env.example .env
+cp docker-compose-prod.yml docker-compose.yml
 $EDITOR .env          # set MYSQL_ROOT_PASSWORD and MYSQL_PASSWORD
 
 docker compose up -d --build

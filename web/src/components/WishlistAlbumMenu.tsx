@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { api } from '../api'
 import { Icon } from './Icon'
 import { formatDuration } from '../utils'
@@ -14,6 +14,14 @@ interface Props {
   onAddTrack: (ref: TrackRef) => Promise<void>
 }
 
+// Matches .add-choice-popover.wide's min-width — used to keep the popover
+// clear of the viewport edge before it has actually rendered and can be
+// measured itself.
+const POPOVER_WIDTH = 330
+// How long the pointer can be off both the trigger and the popover — the gap
+// between them, plus ordinary mouse jitter — before the menu actually closes.
+const CLOSE_DELAY = 150
+
 /**
  * The add control for a wishlisted album: hovering lists the album's tracks
  * inline so a single song can be picked without leaving the wishlist, and each
@@ -21,12 +29,51 @@ interface Props {
  */
 export function WishlistAlbumMenu({ item, canEdit, added, busy, onAddAlbum, onAddTrack }: Props) {
   const [open, setOpen] = useState(false)
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null)
   const [detail, setDetail] = useState<Tralbum | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [addedTracks, setAddedTracks] = useState<Set<number>>(new Set())
   const [adding, setAdding] = useState<number | null>(null)
   const preview = usePreview()
+
+  const triggerRef = useRef<HTMLDivElement>(null)
+  const closeTimer = useRef<ReturnType<typeof setTimeout>>()
+
+  // Delayed rather than immediate: the pointer briefly crosses no element at
+  // all while moving from the trigger button down into the popover below it,
+  // and closing right on that gap would make the popover unreachable.
+  const cancelClose = () => {
+    if (closeTimer.current) clearTimeout(closeTimer.current)
+  }
+  const scheduleClose = () => {
+    cancelClose()
+    closeTimer.current = setTimeout(() => setOpen(false), CLOSE_DELAY)
+  }
+  useEffect(() => () => cancelClose(), [])
+
+  // Fixed viewport coordinates do not follow the sidebar's own scrolling, so
+  // a scroll while open would otherwise leave the popover pointing at
+  // nothing — closing it is simpler than re-measuring on every scroll event.
+  useEffect(() => {
+    if (!open) return
+    const onScroll = () => setOpen(false)
+    window.addEventListener('scroll', onScroll, { capture: true, passive: true })
+    return () => window.removeEventListener('scroll', onScroll, { capture: true })
+  }, [open])
+
+  // Positioned in viewport coordinates rather than relative to any ancestor,
+  // so it never depends on how much room this row's own layout happens to
+  // leave to either side of the trigger — clamped so it lands fully on
+  // screen even when the trigger sits close to an edge.
+  useLayoutEffect(() => {
+    if (!open) return
+    const el = triggerRef.current
+    if (!el) return
+    const rect = el.getBoundingClientRect()
+    const left = Math.max(8, Math.min(rect.right - POPOVER_WIDTH, window.innerWidth - POPOVER_WIDTH - 8))
+    setPos({ top: rect.bottom + 6, left })
+  }, [open])
 
   // Fetched only once the menu is actually opened — a wishlist page can hold
   // dozens of albums and pre-fetching all of them would be wasteful.
@@ -54,8 +101,9 @@ export function WishlistAlbumMenu({ item, canEdit, added, busy, onAddAlbum, onAd
   return (
     <div
       className="add-choice"
-      onPointerEnter={() => setOpen(true)}
-      onPointerLeave={() => setOpen(false)}
+      ref={triggerRef}
+      onPointerEnter={cancelClose}
+      onPointerLeave={scheduleClose}
     >
       <button
         className={added ? 'ghost icon' : 'icon'}
@@ -69,8 +117,14 @@ export function WishlistAlbumMenu({ item, canEdit, added, busy, onAddAlbum, onAd
         {busy ? <div className="spin" /> : <Icon name={added ? 'check' : 'plus'} />}
       </button>
 
-      {open && (
-        <div className="add-choice-popover wide" role="menu">
+      {open && pos && (
+        <div
+          className="add-choice-popover wide"
+          role="menu"
+          style={{ top: pos.top, left: pos.left }}
+          onPointerEnter={cancelClose}
+          onPointerLeave={scheduleClose}
+        >
           <button role="menuitem" disabled={!canEdit || busy} onClick={onAddAlbum}>
             <Icon name="disc" size={14} />
             Add whole album ({item.track_count})

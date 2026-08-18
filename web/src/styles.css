@@ -392,7 +392,6 @@ button.icon { min-height: 36px; padding: 6px 8px; }
 @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
 
 .wish-item {
-  position: relative;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -765,21 +764,21 @@ input[type='checkbox'] { width: auto; height: auto; }
 
 /* ---------- add-choice popover (wishlist albums) ---------- */
 
-.add-choice { display: flex; align-items: center; }
+.add-choice { position: relative; display: flex; align-items: center; }
 
-/* Positioned relative to the whole row (.wish-item), not this small trigger:
-   the trigger sits near the row's right edge, and anchoring to it directly
-   left almost no room to grow into on a long title, pushing the popover's
-   left edge past the sidebar's own. Anchoring to the row instead gives it
-   nearly the full row width to grow leftward into, regardless of where in
-   that row the trigger itself lands. */
+/* Positioned in fixed viewport coordinates, computed in JS from the
+   trigger's own bounding rect (see WishlistAlbumMenu) rather than anchored
+   to any ancestor here — the trigger sits near this row's right edge, often
+   with little room to either side, and a plain CSS anchor either overflowed
+   the sidebar's left edge or (anchored to the row instead) ballooned the
+   hover-bridge below into covering the whole row. Existence in the DOM is
+   controlled by React state, not this rule, so there is no display toggle
+   to write here. */
 .add-choice-popover {
-  display: none;
+  display: flex;
   flex-direction: column;
   gap: 4px;
-  position: absolute;
-  right: 0;
-  top: calc(100% + 6px);
+  position: fixed;
   z-index: 30;
   min-width: 210px;
   padding: 6px;
@@ -789,24 +788,10 @@ input[type='checkbox'] { width: auto; height: auto; }
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
 }
 
-/* Hover for mice, focus-within so keyboards and taps reach it too. */
-.add-choice:hover .add-choice-popover,
-.add-choice:focus-within .add-choice-popover { display: flex; }
-
 .add-choice-popover button {
   justify-content: flex-start;
   min-height: 38px;
   font-size: 12.5px;
-}
-
-/* Keeps the popover from closing as the pointer travels to it. */
-.add-choice::after {
-  content: '';
-  position: absolute;
-  right: 0;
-  top: 100%;
-  width: 100%;
-  height: 8px;
 }
 
 .icon-svg { flex: 0 0 auto; display: block; }
@@ -1318,9 +1303,9 @@ input[type='checkbox'] { width: auto; height: auto; }
   /* Full-width sheet for the wishlist rather than a narrow drawer. */
   .sidebar { width: 100vw; }
 
-  /* Menus that hang off a row would overflow a narrow viewport. */
-  .add-choice-popover,
-  .add-choice-popover.wide,
+  /* Menus that hang off a row would overflow a narrow viewport. .add-choice-
+     popover is excluded — it computes safe, clamped viewport coordinates in
+     JS (see WishlistAlbumMenu) that already account for a narrow screen. */
   .contributor-popover {
     position: fixed;
     left: 8px;

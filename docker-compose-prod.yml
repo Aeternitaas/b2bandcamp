@@ -27,7 +27,11 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     ports:
-      - "${APP_PORT:-9185}:9185"
+      # Loopback-only: Traefik runs with network_mode: host and reaches every
+      # backend via 127.0.0.1:<port>, same as the rest of this host's stack.
+      # Publishing on 0.0.0.0 here would expose the app on every host
+      # interface directly, bypassing Traefik's TLS/auth in front of it.
+      - "127.0.0.1:${APP_PORT:-9185}:9185"
     environment:
       PORT: "9185"
       WEB_DIR: /app/web
