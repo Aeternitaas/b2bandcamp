@@ -4,7 +4,7 @@ Self-hosted Bandcamp playlists. Collect tracks from across Bandcamp into your
 own playlists, reorder them, and share them with a link that lets other people
 edit alongside you.
 
-Playlists are entirely local to this app — it does not use, read, or write
+Playlists are entirely local to this app and it does not use, read, or write
 Bandcamp's own playlist features.
 
 - **Frontend:** React + TypeScript (Vite), installable PWA, mobile-first, monospaced UI
@@ -35,7 +35,7 @@ To close the instance to new sign-ups once your accounts exist, set
 
 **Playlists**
 - Create, rename, describe, and delete playlists
-- Configurable track columns — tempo, length and contributor can be shown,
+- Configurable track columns: tempo, length and contributor can be shown,
   hidden, reordered (drag the heading) and resized (drag its right edge); the
   layout is remembered per browser
 - Tempo is editable inline, because detection gets tracks wrong
@@ -52,8 +52,7 @@ To close the instance to new sign-ups once your accounts exist, set
 
 **Wishlist sidebar**
 - Enter any Bandcamp username (or display name, or profile link) and browse
-  their wishlist in a toggleable side panel — the choice is per-session and is
-  never saved to the playlist
+  their wishlist in a toggleable side panel.
 - Add a wishlisted album whole, or open it and add individual tracks
 - Pages through wishlists of any size
 
@@ -61,16 +60,16 @@ To close the instance to new sign-ups once your accounts exist, set
 
 | Visibility | Who can view | Who can edit |
 |---|---|---|
-| `private` | Owner + invited collaborators | Same — the share link stops working |
+| `private` | Owner + invited collaborators | Same; the share link stops working |
 | `shared` | Invited collaborators, or anyone with the link | Owner + invited collaborators |
 | `public` | Anyone (listed on the owner's profile) | Owner, invitees, or anyone with the link |
 
 Collaborators can be added two ways:
 
-- **By name** — the owner invites an existing account by username or email.
+- **By name**: the owner invites an existing account by username or email.
   This is the deliberate path: no link circulates, and each person can be
   revoked individually.
-- **By link** — a 10-character invite link. Under `shared`, opening it while
+- **By link**: a 10-character invite link. Under `shared`, opening it while
   signed in enrols you as a named collaborator. Under `public`, it grants
   editing outright and edits may be anonymous.
 
@@ -93,6 +92,18 @@ listable on a profile); editing them still requires the link or an invite.
   playlist's visibility from there
 - Tracks are attributed to whoever added them, with their avatar (or coloured
   initials derived from their account id)
+- API tokens for non-browser clients (see **Browser extension** below), listed
+  and revocable from Settings
+
+**Browser extension**
+
+`extension/` is a Chrome extension that adds a **+ Add to playlist** control
+directly on Bandcamp's own album, track, wishlist, and discover/browse pages —
+add something without leaving Bandcamp or switching tabs. It links to any
+b2bandcamp instance by URL and signs in with a token rather than a shared
+session, so it works the same way against a self-hosted instance as this app
+itself does. See `extension/README.md` to install it and `docs/API.md` for the
+API it talks to (the same one the web app uses — nothing extension-only).
 
 ---
 
@@ -113,23 +124,23 @@ Share tokens are 10 characters drawn with rejection sampling from a 57-symbol
 alphabet (~58 bits), which keeps links short enough to paste and retype while
 leaving guessing infeasible against the rate limiter. Lookups match on the
 SHA-256 hash. The raw token is **also** stored so an owner can retrieve their
-own invite link instead of being forced to rotate it — a deliberate trade: it
+own invite link instead of being forced to rotate it, a deliberate trade: it
 means the database holds a working credential, which is an acceptable position
 for a single-box self-hosted deployment but would not be for a shared host.
 
 Other measures:
 
-- **CSRF** — double-submit cookie; every state-changing request must echo the
+- **CSRF**: double-submit cookie; every state-changing request must echo the
   token in an `X-CSRF-Token` header. This matters because public playlists
   accept edits without a session.
-- **SQL injection** — every query uses bound parameters. Reorder operations are
+- **SQL injection**: every query uses bound parameters. Reorder operations are
   additionally scoped by owner/playlist so a crafted id list cannot touch other
   users' rows.
-- **SSRF** — the URL resolver only accepts `bandcamp.com` and `*.bandcamp.com`
+- **SSRF**: the URL resolver only accepts `bandcamp.com` and `*.bandcamp.com`
   hosts, so it cannot be pointed at internal addresses.
-- **Enumeration** — unauthorised requests for a playlist return `404`, not `403`.
-- **Rate limiting** — on sign-in, sign-up, and outbound Bandcamp calls.
-- **Headers** — CSP, `X-Content-Type-Options`, `X-Frame-Options: DENY`,
+- **Enumeration**: unauthorised requests for a playlist return `404`, not `403`.
+- **Rate limiting**: on sign-in, sign-up, and outbound Bandcamp calls.
+- **Headers**: CSP, `X-Content-Type-Options`, `X-Frame-Options: DENY`,
   `Referrer-Policy: no-referrer`.
 - **Cover art URLs** are restricted to `https://` so a playlist cannot smuggle
   `javascript:` or `data:` URLs into another viewer's browser.
@@ -143,7 +154,7 @@ proxy and set `COOKIE_SECURE=true`.
 
 Nothing in the app hardcodes a hostname. The UI calls `/api` with relative
 paths and builds share links from the address you are browsing, so pointing a
-new FQDN at it needs no code or build changes — the same image works on
+new FQDN at it needs no code or build changes. The same image works on
 `localhost`, a LAN address and `music.example.com`.
 
 Three settings matter once a reverse proxy is in front:
@@ -157,7 +168,7 @@ Three settings matter once a reverse proxy is in front:
 **`TRUSTED_PROXIES` is not optional in practice.** Behind a proxy every request
 arrives from the proxy's address, so all users land in the same rate-limit
 bucket and one person's failed logins lock out everybody. Setting it lets the
-server read `X-Forwarded-For` — but only when the immediate peer is one of the
+server read `X-Forwarded-For`, but only when the immediate peer is one of the
 listed networks, because that header is trivially forged and believing it from
 any client would let anyone bypass the limiters outright.
 
@@ -219,7 +230,7 @@ scrapers rely on is gone from Bandcamp's HTML; only identifiers remain in the
 page head. This app reads just those identifiers and gets everything else from
 the mobile API, which is both lighter and more stable.
 
-Metadata is cached in memory — 5 minutes for release detail (short, because it
+Metadata is cached in memory: 5 minutes for release detail (short, because it
 carries signed stream URLs), 30 minutes for URL→id mappings.
 
 **Analysis needs a proxy.** Bandcamp's CDN sends no CORS headers, so an
@@ -249,7 +260,7 @@ The UI contains no emoji. Emoji glyphs come from the OS font, so the same
 character renders differently (or not at all) across platforms and is announced
 unpredictably by screen readers. Icons are inline SVG from
 [Feather](https://feathericons.com) (MIT), copied into `src/components/Icon.tsx`
-rather than fetched — the CSP forbids external assets and the PWA must render
+rather than fetched; the CSP forbids external assets and the PWA must render
 offline.
 
 ---
@@ -313,13 +324,22 @@ web/
 
 ### API
 
-All endpoints are under `/api`. Mutations require `X-CSRF-Token`; share-link
-access is granted with `X-Share-Token`.
+**Full reference, with request/response bodies and examples: [`docs/API.md`](docs/API.md).**
+This is the same API the web app itself uses — nothing is held back for an
+"internal" surface, which is what makes the browser extension (and anything
+else you might build) possible without a second, parallel API.
+
+Quick orientation — every endpoint is under `/api`. Requests authenticate with
+either the browser's session cookie (plus `X-CSRF-Token` on any mutation) or
+an `Authorization: Bearer <token>` header (see `POST /api/auth/tokens`);
+share-link access additionally takes `X-Share-Token`.
 
 ```
 POST   /api/auth/register        POST   /api/auth/login
 POST   /api/auth/logout          GET    /api/auth/me
+POST   /api/auth/tokens                 issue a bearer token from a login+password
 PATCH  /api/account                     email / password (needs current password)
+GET    /api/account/tokens       DELETE /api/account/tokens/{id}
 POST   /api/account/bandcamp     DELETE /api/account/bandcamp
 PUT    /api/account/avatar
 
@@ -327,9 +347,12 @@ GET    /api/playlists            POST   /api/playlists
 POST   /api/playlists/reorder
 GET    /api/playlists/{id}       PATCH  /api/playlists/{id}
 DELETE /api/playlists/{id}
+GET    /api/playlists/{id}/events       Server-Sent Events, live track changes
 
 POST   /api/playlists/{id}/tracks
 POST   /api/playlists/{id}/tracks/reorder
+POST   /api/playlists/{id}/tracks/delete
+PATCH  /api/playlists/{id}/tracks/{trackId}
 DELETE /api/playlists/{id}/tracks/{trackId}
 
 GET    /api/playlists/{id}/share      POST   /api/playlists/{id}/share
@@ -345,6 +368,9 @@ GET    /api/bc/details?type=&id=&band_id=
 GET    /api/bc/fan?username=          GET    /api/bc/wishlist?fan_id=&token=
 GET    /api/bc/stream/{trackId}?band_id=   302 redirect, used for playback
 GET    /api/bc/audio/{trackId}?band_id=    same-origin relay, used for analysis
+
+GET    /api/analysis/version          GET    /api/analysis/{trackId}
+PUT    /api/analysis/{trackId}
 ```
 
 ### Tests
@@ -366,9 +392,9 @@ thing most likely to break this app: Bandcamp changing a response shape.
 |---|---|---|
 | `PORT` | `9185` | Listen port |
 | `WEB_DIR` | `./web` | Directory of built frontend files |
-| `MYSQL_DSN` | — | Full DSN; overrides the parts below |
+| `MYSQL_DSN` | - | Full DSN; overrides the parts below |
 | `MYSQL_HOST` / `MYSQL_PORT` | `127.0.0.1` / `3306` | Database address |
-| `MYSQL_DATABASE` / `MYSQL_USER` / `MYSQL_PASSWORD` | `b2bandcamp` / `b2bandcamp` / — | Credentials |
+| `MYSQL_DATABASE` / `MYSQL_USER` / `MYSQL_PASSWORD` | `b2bandcamp` / `b2bandcamp` / - | Credentials |
 | `SESSION_COOKIE` / `CSRF_COOKIE` | `b2bandcamp_session` / `b2bandcamp_csrf` | Cookie names |
 | `SESSION_TTL_DAYS` | `30` | Session lifetime |
 | `COOKIE_SECURE` | `false` | Set `true` when served over HTTPS |
