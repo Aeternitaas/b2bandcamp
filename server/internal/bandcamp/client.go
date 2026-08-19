@@ -48,9 +48,17 @@ type Client struct {
 }
 
 func New() *Client {
+	// Nearly every request this client makes lands on bandcamp.com, so the
+	// default transport's MaxIdleConnsPerHost of 2 is a real bottleneck: a
+	// user pasting several links in a row would mostly be paying for fresh
+	// TCP+TLS handshakes instead of reusing a warm connection.
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.MaxIdleConnsPerHost = 20
+
 	return &Client{
 		http: &http.Client{
-			Timeout: 15 * time.Second,
+			Timeout:   15 * time.Second,
+			Transport: transport,
 			// Stream URLs are resolved, not followed, we hand the redirect to
 			// the browser so audio bytes never transit this server.
 			CheckRedirect: func(req *http.Request, via []*http.Request) error {
@@ -62,6 +70,17 @@ func New() *Client {
 		},
 		cache: newCache(),
 	}
+}
+
+// drainAndClose lets the transport return this connection to its keep-alive
+// pool: that only happens once the body has been read to EOF, so a handler
+// that reads only a prefix (Resolve reads just the page head, an error path
+// may read nothing at all) would otherwise force every subsequent request to
+// this host to pay for a fresh TCP+TLS handshake. Capped, so a response far
+// larger than anything expected still can't hang around forever.
+func drainAndClose(resp *http.Response) {
+	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 8<<20))
+	resp.Body.Close()
 }
 
 // ---------- public types ----------
@@ -298,7 +317,7 @@ func (c *Client) Resolve(ctx context.Context, rawURL string) (itemType string, i
 	if err != nil {
 		return "", 0, 0, err
 	}
-	defer resp.Body.Close()
+	defer drainAndClose(resp)
 	if resp.StatusCode == http.StatusNotFound {
 		return "", 0, 0, ErrNotFound
 	}
@@ -553,7 +572,7 @@ func (c *Client) fanByUsername(ctx context.Context, name string) (*Fan, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer drainAndClose(resp)
 	if resp.StatusCode == http.StatusNotFound {
 		return nil, ErrNotFound
 	}
@@ -729,7 +748,7 @@ func (c *Client) do(req *http.Request, out any) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer drainAndClose(resp)
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("bandcamp: %s returned %d", req.URL.Path, resp.StatusCode)

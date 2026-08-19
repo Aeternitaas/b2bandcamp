@@ -158,7 +158,7 @@ function AnalysisTab({ progress }: { progress: number }) {
           <div className="stat">
             <div className="stat-label">Tempo</div>
             <div className="stat-value">
-              {analysis.tempo && analysis.tempo.bpm > 0 ? `${analysis.tempo.bpm}` : ', '}
+              {analysis.tempo && analysis.tempo.bpm > 0 ? `${analysis.tempo.bpm}` : '-'}
               <span className="stat-unit"> BPM</span>
             </div>
             {analysis.tempo && (
@@ -185,7 +185,7 @@ function AnalysisTab({ progress }: { progress: number }) {
 
           <div className="stat">
             <div className="stat-label">Key</div>
-            <div className="stat-value">{shownKey ? shownKey.name : ', '}</div>
+            <div className="stat-value">{shownKey ? shownKey.name : '-'}</div>
             {shownKey && (
               <div className="faint small">
                 Camelot {shownKey.camelot} · {confidenceLabel(shownKey.confidence)}

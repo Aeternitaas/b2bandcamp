@@ -4,6 +4,7 @@ import { api, setShareToken } from '../api'
 import { PlaylistView } from '../components/PlaylistView'
 import { useAuth } from '../state/auth'
 import type { Playlist, Track } from '../types'
+import { useDocumentTitle } from '../hooks/useDocumentTitle'
 
 /**
  * A playlist opened through a collaboration link. The token is held in memory
@@ -18,6 +19,8 @@ export function SharePage() {
   const [canEdit, setCanEdit] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+
+  useDocumentTitle(playlist?.title)
 
   useEffect(() => {
     if (!token) {

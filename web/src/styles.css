@@ -299,7 +299,22 @@ button.icon { min-height: 36px; padding: 6px 8px; }
 /* Always transitioning, not just while a margin is actually set, so the
    gap previewing where a dragged-in link would land opens and closes
    smoothly instead of snapping the moment the target row changes. */
-.track-list-item { transition: margin-top .18s ease, margin-bottom .18s ease; }
+.track-list-item { transition: margin-top .18s ease, margin-bottom .18s ease, transform .18s ease; }
+
+/* The row lifted out of the flow while it is being dragged: fixed so it
+   tracks the pointer in viewport coordinates, above everything else, and
+   inert so no interaction can land on it instead of on whatever real row
+   this dragged card happens to overlap. */
+.drag-ghost {
+  position: fixed;
+  z-index: 60;
+  pointer-events: none;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
+  border-radius: var(--radius);
+  background: var(--surface);
+  opacity: 0.96;
+}
+.drag-ghost .track-list-item { transition: none; }
 
 .track-row {
   display: flex;

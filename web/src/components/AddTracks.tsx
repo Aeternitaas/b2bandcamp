@@ -4,7 +4,7 @@ import { Modal } from './Modal'
 import { TralbumPanel } from './TralbumPanel'
 import { usePreview } from '../audio/usePreview'
 import { debounce, looksLikeBandcampUrl } from '../utils'
-import type { SearchResult, TrackRef } from '../types'
+import type { SearchResult, TrackRef, Tralbum } from '../types'
 import { Icon } from './Icon'
 
 interface Props {
@@ -15,7 +15,11 @@ interface Props {
   existingTrackIds: Set<number>
 }
 
-type Selection = { type: 'a' | 't'; id: number; bandId: number }
+// detail carries what resolving a pasted link already fetched, so opening it
+// doesn't pay for a second, identical request to re-derive the same data. A
+// search result has no detail yet, only these ids, TralbumPanel fetches it
+// as before in that case.
+type Selection = { type: 'a' | 't'; id: number; bandId: number; detail?: Tralbum }
 
 const TABS: { key: string; label: string }[] = [
   { key: '', label: 'All' },
@@ -84,16 +88,22 @@ export function AddTracks({ onClose, onAdd, existingTrackIds }: Props) {
   // sight (and sound) unheard. The preview itself loads as soon as a
   // recognisable link is pasted, same as search results loading as you type;
   // only the audio stays behind an explicit press, inside that view.
+  //
+  // A much shorter debounce than search's: a pasted URL arrives complete in
+  // one change event, there is no "still typing" to wait out, this only
+  // needs to survive someone editing a hand-typed one keystroke at a time.
+  // The detail this fetches is kept on the selection so TralbumPanel does not
+  // turn around and fetch the exact same thing again.
   const runResolveUrl = useMemo(() => debounce((url: string) => {
     api.resolveUrl(url)
       .then((detail) => {
-        setSelected({ type: detail.type, id: detail.id, bandId: detail.band_id })
+        setSelected({ type: detail.type, id: detail.id, bandId: detail.band_id, detail })
         setQuery('')
         setError('')
       })
       .catch((e: Error) => setError(e.message))
       .finally(() => setAddingUrl(false))
-  }, 280), [])
+  }, 80), [])
 
   useEffect(() => {
     if (!query.trim()) {
@@ -190,6 +200,7 @@ export function AddTracks({ onClose, onAdd, existingTrackIds }: Props) {
           onAdd={onAdd}
           onBack={() => setSelected(null)}
           existingTrackIds={existingTrackIds}
+          initialDetail={selected.detail}
         />
       ) : (
         <div className="col">

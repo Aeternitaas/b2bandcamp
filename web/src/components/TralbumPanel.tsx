@@ -14,6 +14,14 @@ interface Props {
   /** Bandcamp track ids already in the playlist, so a repeat add can be caught
    *  before it happens rather than after. */
   existingTrackIds: Set<number>
+  /**
+   * A pasted link already resolves to full detail server-side (see AddTracks'
+   * runResolveUrl), so this skips fetching it a second time here purely to
+   * re-derive what the caller already has. Only used when it matches this
+   * type/id: a search result picked while one of these is still on screen
+   * has no detail of its own yet, and must fetch normally.
+   */
+  initialDetail?: Tralbum
 }
 
 /** A track add held for confirmation because it already exists in the
@@ -28,9 +36,10 @@ type PendingDuplicate = { trackId: number; trackBandId: number; title: string; a
  * time. Shared by every "look at this release" entry point in the app,
  * search results and a pasted link both land here.
  */
-export function TralbumPanel({ type, id, bandId, onAdd, onBack, existingTrackIds }: Props) {
-  const [detail, setDetail] = useState<Tralbum | null>(null)
-  const [loading, setLoading] = useState(true)
+export function TralbumPanel({ type, id, bandId, onAdd, onBack, existingTrackIds, initialDetail }: Props) {
+  const matchesInitial = initialDetail && initialDetail.type === type && initialDetail.id === id
+  const [detail, setDetail] = useState<Tralbum | null>(matchesInitial ? initialDetail : null)
+  const [loading, setLoading] = useState(!matchesInitial)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState<number | 'all' | null>(null)
   const [added, setAdded] = useState<Set<number>>(new Set())
@@ -38,6 +47,13 @@ export function TralbumPanel({ type, id, bandId, onAdd, onBack, existingTrackIds
   const preview = usePreview()
 
   useEffect(() => {
+    if (initialDetail && initialDetail.type === type && initialDetail.id === id) {
+      setDetail(initialDetail)
+      setError('')
+      setLoading(false)
+      return
+    }
+
     let cancelled = false
     setLoading(true)
     setError('')
@@ -48,7 +64,7 @@ export function TralbumPanel({ type, id, bandId, onAdd, onBack, existingTrackIds
       .finally(() => { if (!cancelled) setLoading(false) })
 
     return () => { cancelled = true }
-  }, [type, id, bandId])
+  }, [type, id, bandId, initialDetail])
 
   const addAll = async (skipDuplicateCheck = false) => {
     if (!detail) return

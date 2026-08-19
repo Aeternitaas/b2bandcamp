@@ -71,7 +71,7 @@ export function BpmCell({ bpm, overridden, editable, onSave }: Props) {
       disabled={!editable || busy}
       title={overridden ? 'Manually set, click to edit' : editable ? 'Click to edit tempo' : undefined}
     >
-      {busy ? <div className="spin" /> : bpm ? Math.round(bpm) : ', '}
+      {busy ? <div className="spin" /> : bpm ? Math.round(bpm) : '-'}
     </button>
   )
 }

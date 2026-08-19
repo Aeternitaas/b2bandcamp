@@ -91,7 +91,7 @@ export function KeyCell({ camelot, keyName, overridden, editable, onSave }: Prop
           <span className="key-camelot">{camelot}</span>
           {name && <span className="key-name">({shortKey(name)})</span>}
         </>
-      ) : '\u2014'}
+      ) : '-'}
     </button>
   )
 }

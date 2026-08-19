@@ -779,10 +779,14 @@ export function PlaylistView({
           // in the visible list, which only lines up with the real order when
           // that list is not filtered or resorted.
           onDropExternal={canEdit && !reordering ? addUrlAt : undefined}
-          renderItem={(track, { index, dragging, handle }) => (
+          renderItem={(track, { index, displayIndex, dragging, handle }) => (
             <TrackRow
               track={track}
-              number={trackNumbers.get(track.id) ?? index + 1}
+              // Filtered: keep the real gaps a hidden contributor leaves.
+              // Unfiltered (the only state dragging is ever enabled in):
+              // the live position, so the number previews a drag in progress
+              // instead of only updating once it lands.
+              number={filtering ? (trackNumbers.get(track.id) ?? displayIndex + 1) : displayIndex + 1}
               columns={cols.columns}
               gridTemplate={gridTemplate}
               compact={compact}

@@ -4,6 +4,7 @@ import { api, setShareToken } from '../api'
 import { PlaylistView } from '../components/PlaylistView'
 import type { Playlist, Track } from '../types'
 import { Icon } from '../components/Icon'
+import { useDocumentTitle } from '../hooks/useDocumentTitle'
 
 export function PlaylistPage() {
   const { id } = useParams<{ id: string }>()
@@ -13,6 +14,8 @@ export function PlaylistPage() {
   const [tracks, setTracks] = useState<Track[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+
+  useDocumentTitle(playlist?.title)
 
   useEffect(() => {
     // Reached by id rather than a share link, so no share token applies.
