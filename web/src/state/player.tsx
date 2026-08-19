@@ -98,6 +98,13 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   // before metadata arrives is silently ignored by the audio element.
   const pendingSeekRef = useRef<number | null>(null)
 
+  // A double/triple-click on a track row fires onPlay more than once for the
+  // same track within milliseconds. Without this, each extra call re-assigns
+  // audio.src and re-calls audio.play(), which aborts the prior play()
+  // promise and surfaces a spurious "Playback failed" error.
+  const lastLoadRef = useRef<{ id: number; time: number } | null>(null)
+  const LOAD_DEBOUNCE_MS = 600
+
   const current = index >= 0 && index < queue.length ? queue[index] : null
 
   // Keep refs of the queue so audio event handlers, which are bound once, can
@@ -115,6 +122,11 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       setError('This track is missing its Bandcamp artist id and cannot be played.')
       return
     }
+
+    const now = Date.now()
+    const last = lastLoadRef.current
+    if (last && last.id === track.id && now - last.time < LOAD_DEBOUNCE_MS) return
+    lastLoadRef.current = { id: track.id, time: now }
 
     setError('')
     setPosition(0)
