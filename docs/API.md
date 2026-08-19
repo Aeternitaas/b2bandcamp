@@ -60,15 +60,14 @@ Content-Type: application/json
 { "token": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", "id": 4, "label": "My script" }
 ```
 
-`login` is your username or email. `label` is optional (defaults to "API
+- `login` is your username or email.
+- `label` is optional (defaults to "API
 token") and is only there to help you tell tokens apart later, pick
 something that says what's holding it ("Chrome extension", "laptop", "backup
 script").
-
-**The `token` value is shown exactly once, in this response.** There is no
-"reveal token" later, store it somewhere your client controls (the
-extension keeps it in `chrome.storage.local`) and if you lose it, revoke it
-and issue a new one.
+- `token` value is shown exactly once. There is no "reveal token" later, store
+it somewhere your client controls (the extension keeps it in 
+`chrome.storage.local`) and if you lose it, revoke it and issue a new one.
 
 This call needs no `X-CSRF-Token` and no prior cookie from this instance at
 all, it is the very first request a fresh client ever makes here, so there
@@ -98,8 +97,10 @@ per IP), since it verifies a password the same way.
 ```
 GET /api/account/tokens
 ```
+
 Requires sign-in (either method). Lists your own tokens, never the raw
 value, only what you'd need to recognize and revoke one:
+
 ```json
 { "tokens": [
   { "id": 4, "label": "Chrome extension", "created_at": "2026-08-18T10:00:00Z", "last_used_at": "2026-08-18T14:22:09Z" }
@@ -353,18 +354,18 @@ PUT /api/analysis/{trackId}         (signed in)
 { "bpm": 122.4, "bpm_confidence": 0.8, "key_name": "A minor", "key_camelot": "8A",
   "key_tonic": 9, "key_scale": "minor", "key_confidence": 0.7, "peaks": "<base64>" }
 ```
+
 Client-side code (the web app's in-browser detector) computes these and
 writes them back so nobody else has to re-download and re-analyze the same
 track. There's no reason an external integration would call `PUT` here
 unless it's running the same detection, reading via `GET` is the
 interesting half for anything else.
 
-## Health
+## Healthcheck Endpoint
 
 ```
 GET /api/health   -> { "status": "ok" }
 ```
-No auth. What a container's `HEALTHCHECK` and an uptime monitor should hit.
 
 ## A minimal client, end to end
 
@@ -382,8 +383,3 @@ curl -s https://b2b.example.com/api/playlists \
 curl -s https://b2b.example.com/api/playlists/12/tracks \
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d '{"url":"https://artist.bandcamp.com/album/some-album"}'
-```
-
-No `X-CSRF-Token`, no cookie jar, the bearer token is the entire credential,
-which is exactly what makes it the right fit for something that isn't a
-browser tab.
