@@ -210,6 +210,13 @@ export function PlaylistView({
     })
   }, [])
 
+  // What's already in the playlist, by Bandcamp track id, so the add-track
+  // popup can warn before filing a track in twice.
+  const existingTrackIds = useMemo(
+    () => new Set(tracks.map((t) => t.bc_track_id)),
+    [tracks],
+  )
+
   const addRefs = useCallback(async (refs: TrackRef[]) => {
     const res = await api.addTracks(playlist.id, { items: refs })
     onTracksChange(res.tracks)
@@ -821,6 +828,7 @@ export function PlaylistView({
         <AddTracks
           onClose={() => setShowAdd(false)}
           onAdd={addRefs}
+          existingTrackIds={existingTrackIds}
         />
       )}
 

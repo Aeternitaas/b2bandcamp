@@ -283,21 +283,19 @@ function AlbumTab({
         </div>
       </div>
 
-      <div className="track-list">
+      <div className="popover-tracks" style={{ maxHeight: 'none' }}>
         {album.tracks.map((t) => (
-          <div className={`track-row${t.track_id === currentTrackId ? ' playing' : ''}`} key={t.track_id}>
-            <div className="track-index">{t.track_num}</div>
-            <div className="track-meta">
-              <div className="track-title truncate">{t.title}</div>
-            </div>
-            <div className="track-dur">{formatDuration(t.duration)}</div>
+          <div className={`popover-track${t.track_id === currentTrackId ? ' playing' : ''}`} key={t.track_id}>
+            <span className="track-index">{t.track_num}</span>
+            <span className="truncate small" style={{ flex: 1 }}>{t.title}</span>
+            <span className="faint small">{formatDuration(t.duration)}</span>
             <a
               className="ghost icon"
               href={t.track_url}
               target="_blank"
               rel="noreferrer noopener"
               aria-label={`Open ${t.title} on Bandcamp`}
-              style={{ display: 'inline-flex', alignItems: 'center', padding: '6px 8px' }}
+              style={{ display: 'inline-flex', alignItems: 'center', padding: '4px 6px' }}
             >
               <Icon name="external-link" size={13} />
             </a>

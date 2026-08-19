@@ -10,6 +10,9 @@ import { Icon } from './Icon'
 interface Props {
   onClose: () => void
   onAdd: (refs: TrackRef[]) => Promise<void>
+  /** Bandcamp track ids already in the playlist, so a repeat add can be caught
+   *  before it happens rather than after. */
+  existingTrackIds: Set<number>
 }
 
 type Selection = { type: 'a' | 't'; id: number; bandId: number }
@@ -28,7 +31,7 @@ const TABS: { key: string; label: string }[] = [
  * result also has its own quick-add "+", for adding several different
  * matches straight from the list without opening any of them.
  */
-export function AddTracks({ onClose, onAdd }: Props) {
+export function AddTracks({ onClose, onAdd, existingTrackIds }: Props) {
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState('')
   const [results, setResults] = useState<SearchResult[]>([])
@@ -41,6 +44,9 @@ export function AddTracks({ onClose, onAdd }: Props) {
   // them and without the popup closing in between.
   const [addingRow, setAddingRow] = useState<string | null>(null)
   const [addedRows, setAddedRows] = useState<Set<string>>(new Set())
+  // A track result already in the playlist is held here instead of added
+  // straight away, so it can be confirmed rather than duplicated by accident.
+  const [pendingDuplicate, setPendingDuplicate] = useState<SearchResult | null>(null)
 
   const inputRef = useRef<HTMLInputElement>(null)
   useEffect(() => { inputRef.current?.focus() }, [])
@@ -143,8 +149,13 @@ export function AddTracks({ onClose, onAdd }: Props) {
   /** Adds a result straight from the list, the whole release if it is an
    *  album, so several different matches can be added in a row without
    *  opening any of them. */
-  const quickAdd = async (r: SearchResult) => {
+  const quickAdd = async (r: SearchResult, skipDuplicateCheck = false) => {
     const key = `${r.type}-${r.id}`
+    if (!skipDuplicateCheck && r.type === 't' && existingTrackIds.has(r.id)) {
+      setPendingDuplicate(r)
+      return
+    }
+    setPendingDuplicate(null)
     setAddingRow(key)
     setError('')
     try {
@@ -158,6 +169,7 @@ export function AddTracks({ onClose, onAdd }: Props) {
   }
 
   const pick = (r: SearchResult) => {
+    setPendingDuplicate(null)
     if (r.type === 'b') {
       // An artist has no tracks of its own, search their catalogue instead.
       setQuery(r.name)
@@ -177,6 +189,7 @@ export function AddTracks({ onClose, onAdd }: Props) {
           bandId={selected.bandId}
           onAdd={onAdd}
           onBack={() => setSelected(null)}
+          existingTrackIds={existingTrackIds}
         />
       ) : (
         <div className="col">
@@ -214,6 +227,28 @@ export function AddTracks({ onClose, onAdd }: Props) {
           )}
 
           {error && <div className="notice error">{error}</div>}
+
+          {pendingDuplicate && (
+            <div className="notice info">
+              <span>“{pendingDuplicate.name}” is already in this playlist.</span>
+              <div className="row" style={{ gap: 6, marginTop: 6 }}>
+                <button
+                  className="icon"
+                  disabled={addingRow !== null}
+                  onClick={() => void quickAdd(pendingDuplicate, true)}
+                >
+                  Add anyway
+                </button>
+                <button
+                  className="ghost icon"
+                  disabled={addingRow !== null}
+                  onClick={() => setPendingDuplicate(null)}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
 
           {loading && <div className="row"><div className="spin" /> <span className="dim small">Searching…</span></div>}
 

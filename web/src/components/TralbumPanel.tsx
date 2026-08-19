@@ -11,7 +11,15 @@ interface Props {
   bandId: number
   onAdd: (refs: TrackRef[]) => Promise<void>
   onBack?: () => void
+  /** Bandcamp track ids already in the playlist, so a repeat add can be caught
+   *  before it happens rather than after. */
+  existingTrackIds: Set<number>
 }
+
+/** A track add held for confirmation because it already exists in the
+ *  playlist; `all` marks the single-track "Add track" button rather than a
+ *  particular row inside an album's track list. */
+type PendingDuplicate = { trackId: number; trackBandId: number; title: string; all: boolean }
 
 /**
  * Expanded view of one Bandcamp album or track, with a preview available
@@ -20,12 +28,13 @@ interface Props {
  * time. Shared by every "look at this release" entry point in the app,
  * search results and a pasted link both land here.
  */
-export function TralbumPanel({ type, id, bandId, onAdd, onBack }: Props) {
+export function TralbumPanel({ type, id, bandId, onAdd, onBack, existingTrackIds }: Props) {
   const [detail, setDetail] = useState<Tralbum | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState<number | 'all' | null>(null)
   const [added, setAdded] = useState<Set<number>>(new Set())
+  const [pendingDuplicate, setPendingDuplicate] = useState<PendingDuplicate | null>(null)
   const preview = usePreview()
 
   useEffect(() => {
@@ -41,8 +50,13 @@ export function TralbumPanel({ type, id, bandId, onAdd, onBack }: Props) {
     return () => { cancelled = true }
   }, [type, id, bandId])
 
-  const addAll = async () => {
+  const addAll = async (skipDuplicateCheck = false) => {
     if (!detail) return
+    if (!skipDuplicateCheck && type === 't' && existingTrackIds.has(id)) {
+      setPendingDuplicate({ trackId: id, trackBandId: bandId, title: detail.title, all: true })
+      return
+    }
+    setPendingDuplicate(null)
     setBusy('all')
     try {
       await onAdd([{ type, id, band_id: bandId }])
@@ -54,7 +68,12 @@ export function TralbumPanel({ type, id, bandId, onAdd, onBack }: Props) {
     }
   }
 
-  const addOne = async (trackId: number, trackBandId: number) => {
+  const addOne = async (trackId: number, trackBandId: number, title: string, skipDuplicateCheck = false) => {
+    if (!skipDuplicateCheck && existingTrackIds.has(trackId)) {
+      setPendingDuplicate({ trackId, trackBandId, title, all: false })
+      return
+    }
+    setPendingDuplicate(null)
     setBusy(trackId)
     try {
       await onAdd([{ type: 't', id: trackId, band_id: trackBandId || bandId }])
@@ -64,6 +83,12 @@ export function TralbumPanel({ type, id, bandId, onAdd, onBack }: Props) {
     } finally {
       setBusy(null)
     }
+  }
+
+  const confirmDuplicateAdd = () => {
+    if (!pendingDuplicate) return
+    if (pendingDuplicate.all) void addAll(true)
+    else void addOne(pendingDuplicate.trackId, pendingDuplicate.trackBandId, pendingDuplicate.title, true)
   }
 
   if (loading) {
@@ -135,7 +160,7 @@ export function TralbumPanel({ type, id, bandId, onAdd, onBack }: Props) {
 
           <button
             className="primary"
-            onClick={addAll}
+            onClick={() => void addAll()}
             disabled={busy !== null || streamable.length === 0}
             style={{ marginTop: 4 }}
           >
@@ -146,6 +171,16 @@ export function TralbumPanel({ type, id, bandId, onAdd, onBack }: Props) {
       </div>
 
       {error && <div className="notice error">{error}</div>}
+
+      {pendingDuplicate && (
+        <div className="notice info">
+          <span>“{pendingDuplicate.title}” is already in this playlist.</span>
+          <div className="row" style={{ gap: 6, marginTop: 6 }}>
+            <button className="icon" disabled={busy !== null} onClick={confirmDuplicateAdd}>Add anyway</button>
+            <button className="ghost icon" disabled={busy !== null} onClick={() => setPendingDuplicate(null)}>Cancel</button>
+          </div>
+        </div>
+      )}
 
       {type === 'a' && (
         <div className="track-list">
@@ -191,7 +226,7 @@ export function TralbumPanel({ type, id, bandId, onAdd, onBack }: Props) {
                 <button
                   className={isAdded ? 'ghost icon' : 'icon'}
                   disabled={!t.streamable || busy !== null || isAdded}
-                  onClick={() => addOne(t.track_id, t.band_id)}
+                  onClick={() => void addOne(t.track_id, t.band_id, t.title)}
                   aria-label={`Add ${t.title}`}
                 >
                   {busy === t.track_id ? <div className="spin" /> : <Icon name={isAdded ? 'check' : 'plus'} />}
