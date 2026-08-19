@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { useAuth } from '../state/auth'
 import { api } from '../api'
 import { AddTracks } from './AddTracks'
 import { Avatar } from './Avatar'
@@ -80,6 +81,7 @@ export function PlaylistView({
 }: Props) {
   const navigate = useNavigate()
   const player = usePlayer()
+  const { user } = useAuth()
 
   const [showAdd, setShowAdd] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
@@ -116,13 +118,18 @@ export function PlaylistView({
     return () => { cancelled = true }
   }, [playlist.id])
 
-  // Live updates from other collaborators. The stream carries no payload,
-  // just a cue to refetch, so it stays correct no matter what changed.
-  // Share-link guests are excluded: EventSource cannot carry the
-  // X-Share-Token header their access depends on, only the session cookie,
-  // so they keep the plain fetch-on-load behavior instead.
+  // Live updates from other collaborators, on this playlist and every other
+  // tab or device watching it, whether the track that changed was added,
+  // removed, retagged, or reassigned: the stream carries no payload, just a
+  // cue to refetch, so one signal path covers every kind of edit.
+  //
+  // Only a truly anonymous share-link guest is excluded: EventSource cannot
+  // carry the X-Share-Token header their access depends on, only the session
+  // cookie. Signing in while a share link is open (shareMode) makes someone
+  // a real collaborator authenticated by that cookie instead, same as
+  // opening the playlist directly, so they still get live updates.
   useEffect(() => {
-    if (shareMode) return
+    if (shareMode && !user) return
     const source = new EventSource(`/api/playlists/${playlist.id}/events`)
     source.onmessage = () => {
       api.getPlaylist(playlist.id)
@@ -130,7 +137,7 @@ export function PlaylistView({
         .catch(() => {}) // a dropped refetch just waits for the next signal
     }
     return () => source.close()
-  }, [playlist.id, shareMode, onTracksChange])
+  }, [playlist.id, shareMode, user, onTracksChange])
 
   const isOwner = playlist.role === 'owner'
   const cover = useMemo(() => playlistCover(playlist, tracks, 9), [playlist, tracks])
