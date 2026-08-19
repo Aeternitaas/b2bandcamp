@@ -31,6 +31,16 @@ header h1 {
   letter-spacing: -0.02em;
 }
 
+brand {
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  color: var(--text);
+}
+
+brand span {
+  color: var(--accent);
+}
+
 label {
   display: block;
   font-size: 11px;
