@@ -529,7 +529,7 @@
         align-items: center;
         justify-content: center;
         cursor: pointer;
-        font: 700 ${Math.round(size * 0.8)}px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font: 700 ${Math.round(size * 0.9)}px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
         text-shadow: 0 1px 3px rgba(0,0,0,.7);
         transition: transform .1s ease;
       }
