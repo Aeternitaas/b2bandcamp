@@ -307,9 +307,15 @@ func (s *Store) AddTracks(ctx context.Context, playlistID int64, addedBy *int64,
 	}
 	defer tx.Rollback()
 
+	// FOR UPDATE, not a plain read: two adds to the same playlist landing in
+	// concurrent transactions (two collaborators at once, or a doubled click)
+	// would otherwise both see the same MAX(position) and insert at the same
+	// spot. The locking read takes a next-key lock over this playlist_id's
+	// slice of the index, so a second transaction's SELECT blocks until the
+	// first commits its inserts, then sees the up-to-date max.
 	var maxPos sql.NullInt64
 	if err := tx.QueryRowContext(ctx,
-		`SELECT MAX(position) FROM playlist_tracks WHERE playlist_id = ?`, playlistID).Scan(&maxPos); err != nil {
+		`SELECT MAX(position) FROM playlist_tracks WHERE playlist_id = ? FOR UPDATE`, playlistID).Scan(&maxPos); err != nil {
 		return 0, err
 	}
 	next := 0
