@@ -10,6 +10,11 @@ interface Props {
   id: number
   bandId: number
   onAdd: (refs: TrackRef[]) => Promise<void>
+  /** Called once the whole release (a single track, or "Add whole album")
+   *  has been added, closing the popup: there is nothing left to add. Not
+   *  called for a single song picked off an album's track list, that album
+   *  may still have more to add. */
+  onClose: () => void
   onBack?: () => void
   /** Bandcamp track ids already in the playlist, so a repeat add can be caught
    *  before it happens rather than after. */
@@ -36,7 +41,7 @@ type PendingDuplicate = { trackId: number; trackBandId: number; title: string; a
  * time. Shared by every "look at this release" entry point in the app,
  * search results and a pasted link both land here.
  */
-export function TralbumPanel({ type, id, bandId, onAdd, onBack, existingTrackIds, initialDetail }: Props) {
+export function TralbumPanel({ type, id, bandId, onAdd, onClose, onBack, existingTrackIds, initialDetail }: Props) {
   const matchesInitial = initialDetail && initialDetail.type === type && initialDetail.id === id
   const [detail, setDetail] = useState<Tralbum | null>(matchesInitial ? initialDetail : null)
   const [loading, setLoading] = useState(!matchesInitial)
@@ -76,7 +81,7 @@ export function TralbumPanel({ type, id, bandId, onAdd, onBack, existingTrackIds
     setBusy('all')
     try {
       await onAdd([{ type, id, band_id: bandId }])
-      setAdded(new Set(detail.tracks.map((t) => t.track_id)))
+      onClose()
     } catch (e) {
       setError((e as Error).message)
     } finally {

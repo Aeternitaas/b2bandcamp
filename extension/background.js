@@ -167,10 +167,10 @@ const handlers = {
     });
   },
 
-  async addTrack({ playlistId, type, id, bandId }) {
+  async addTrack({ playlistId, kind, id, bandId }) {
     return apiFetch(`/api/playlists/${playlistId}/tracks`, {
       method: 'POST',
-      body: JSON.stringify({ items: [{ type, id, band_id: bandId }] })
+      body: JSON.stringify({ items: [{ type: kind, id, band_id: bandId }] })
     });
   },
 

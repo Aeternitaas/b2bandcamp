@@ -1,13 +1,14 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { api } from '../api'
-import { copyText, playlistCover, shareUrl as buildShareUrl } from '../utils'
+import { copyText, formatDuration, playlistCover, shareUrl as buildShareUrl } from '../utils'
 import { Modal } from './Modal'
 import { InviteCollaborators } from './InviteCollaborators'
-import type { Collaborator, Playlist, Visibility } from '../types'
+import type { Collaborator, Playlist, Track, Visibility } from '../types'
 import { Icon } from './Icon'
 
 interface Props {
   playlist: Playlist
+  tracks: Track[]
   isOwner: boolean
   onClose: () => void
   onSaved: (p: Playlist) => void
@@ -20,7 +21,36 @@ const VISIBILITY_HELP: Record<Visibility, string> = {
   public: 'Listed on your public profile and readable by anyone. Anyone holding the link can also edit, including people without an account.',
 }
 
-export function PlaylistSettings({ playlist, isOwner, onClose, onSaved, onDeleted }: Props) {
+type ExportField = 'track_number' | 'artist' | 'title' | 'bpm' | 'key' | 'time' | 'notes' | 'added_by'
+
+/** Canonical order for both the checkbox list and the exported line, so the
+ *  default selection reads as "<Artist> - <Title>". */
+const EXPORT_FIELDS: { key: ExportField; label: string }[] = [
+  { key: 'track_number', label: 'Track #' },
+  { key: 'artist', label: 'Artist' },
+  { key: 'title', label: 'Title' },
+  { key: 'bpm', label: 'BPM' },
+  { key: 'key', label: 'Key' },
+  { key: 'time', label: 'Time' },
+  { key: 'notes', label: 'Notes' },
+  { key: 'added_by', label: 'Added by' },
+]
+
+function exportFieldValue(track: Track, index: number, field: ExportField): string {
+  switch (field) {
+    case 'track_number': return String(index + 1)
+    case 'artist': return track.artist
+    case 'title': return track.title
+    // A hand-entered override wins over what analysis found, same rule TrackRow uses.
+    case 'bpm': { const bpm = track.bpm ?? track.detected_bpm; return bpm ? String(bpm) : '' }
+    case 'key': return track.key_override || track.key_camelot
+    case 'time': return formatDuration(track.duration)
+    case 'notes': return track.note
+    case 'added_by': return track.added_by_name || 'Anonymous'
+  }
+}
+
+export function PlaylistSettings({ playlist, tracks, isOwner, onClose, onSaved, onDeleted }: Props) {
   const [title, setTitle] = useState(playlist.title)
   const [description, setDescription] = useState(playlist.description)
   const [coverUrl, setCoverUrl] = useState(playlist.cover_url)
@@ -29,6 +59,24 @@ export function PlaylistSettings({ playlist, isOwner, onClose, onSaved, onDelete
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [status, setStatus] = useState('')
+
+  const [exportFields, setExportFields] = useState<Set<ExportField>>(new Set(['artist', 'title']))
+  const [exportStatus, setExportStatus] = useState('')
+  const toggleExportField = (field: ExportField) => setExportFields((prev) => {
+    const next = new Set(prev)
+    if (next.has(field)) next.delete(field)
+    else next.add(field)
+    return next
+  })
+  const exportText = useMemo(() => {
+    const selected = EXPORT_FIELDS.filter((f) => exportFields.has(f.key))
+    return tracks
+      .map((t, i) => selected.map((f) => exportFieldValue(t, i, f.key)).filter(Boolean).join(' - '))
+      .join('\n')
+  }, [tracks, exportFields])
+  const copyExport = async () => {
+    setExportStatus(await copyText(exportText) ? 'Copied.' : 'Copy failed, select the text above and copy it manually.')
+  }
 
   const [shareUrl, setShareUrl] = useState('')
   const [sharing, setSharing] = useState(false)
@@ -171,6 +219,22 @@ export function PlaylistSettings({ playlist, isOwner, onClose, onSaved, onDelete
             {saving ? <div className="spin" /> : null} Save changes
           </button>
         </div>
+
+        <hr style={{ border: 0, borderTop: '1px solid var(--border)', margin: '4px 0' }} />
+        <h3>Export tracklist</h3>
+        <div className="row wrap" style={{ gap: 12 }}>
+          {EXPORT_FIELDS.map((f) => (
+            <label key={f.key} className="row" style={{ gap: 4 }}>
+              <input type="checkbox" checked={exportFields.has(f.key)} onChange={() => toggleExportField(f.key)} />
+              {f.label}
+            </label>
+          ))}
+        </div>
+        <textarea readOnly rows={6} value={exportText} style={{ fontFamily: 'monospace' }} />
+        <div className="row">
+          <button onClick={copyExport} disabled={tracks.length === 0 || exportFields.size === 0}>Copy tracklist</button>
+        </div>
+        {exportStatus && <div className="notice ok">{exportStatus}</div>}
 
         {isOwner && (
           <>

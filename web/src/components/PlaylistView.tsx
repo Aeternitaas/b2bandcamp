@@ -18,7 +18,7 @@ import { EMPTY_WISHLIST_CACHE, WishlistSidebar } from './WishlistSidebar'
 import type { WishlistCache } from './WishlistSidebar'
 import { usePlayer } from '../state/player'
 import { analyzeTrack } from '../audio/analyzeTrack'
-import { formatTotal, playlistCover } from '../utils'
+import { formatTotal, looksLikeBandcampUrl, playlistCover } from '../utils'
 import type { Collaborator, Playlist, Track, TrackRef } from '../types'
 
 /** The key to show: a hand-entered override wins over what analysis found. */
@@ -84,6 +84,10 @@ export function PlaylistView({
   const { user } = useAuth()
 
   const [showAdd, setShowAdd] = useState(false)
+  // Set when a Bandcamp link is pasted into the page itself rather than into
+  // the add-music field, so opening that popup resolves it immediately
+  // instead of asking for the same link a second time.
+  const [pasteUrl, setPasteUrl] = useState<string | undefined>(undefined)
   const [showSettings, setShowSettings] = useState(false)
   const [showWishlist, setShowWishlist] = useState(false)
   // Kept here rather than on the playlist: the wishlist source is a browsing
@@ -260,6 +264,36 @@ export function PlaylistView({
       setError((err as Error).message)
     }
   }, [playlist, tracks, onPlaylistChange, onTracksChange])
+
+  /**
+   * A track or album link pasted anywhere on the page (rather than typed into
+   * the add-music field itself) opens that same popup instead of adding
+   * straight away, so an album lands on its track list, not silently in full.
+   * Ignored while focus is in an editable field, that paste belongs to
+   * whatever field it lands in (including add-music's own link field, which
+   * resolves it itself).
+   *
+   * Bound straight to `document` rather than an onPaste prop: when nothing on
+   * the page has focus, the paste event targets document/body, which sits
+   * above the React root in the DOM. React's synthetic events only delegate
+   * through that root, so a prop on any component here would never see it.
+   * Disabled outright while the popup is already open, so its own field
+   * handles pasting without this also firing and doubling up the text.
+   */
+  useEffect(() => {
+    if (!canEdit || showAdd) return
+    const onPaste = (e: ClipboardEvent) => {
+      const target = e.target as HTMLElement | null
+      if (target?.closest('input, textarea, [contenteditable="true"]')) return
+      const text = e.clipboardData?.getData('text/plain').trim()
+      if (!text || !looksLikeBandcampUrl(text)) return
+      e.preventDefault()
+      setPasteUrl(text)
+      setShowAdd(true)
+    }
+    document.addEventListener('paste', onPaste)
+    return () => document.removeEventListener('paste', onPaste)
+  }, [canEdit, showAdd])
 
   const reorder = useCallback(async (next: Track[]) => {
     // Show the new order immediately; reconcile with the server afterwards.
@@ -837,15 +871,17 @@ export function PlaylistView({
 
       {showAdd && (
         <AddTracks
-          onClose={() => setShowAdd(false)}
+          onClose={() => { setShowAdd(false); setPasteUrl(undefined) }}
           onAdd={addRefs}
           existingTrackIds={existingTrackIds}
+          initialUrl={pasteUrl}
         />
       )}
 
       {showSettings && (
         <PlaylistSettings
           playlist={playlist}
+          tracks={tracks}
           isOwner={isOwner}
           onClose={() => setShowSettings(false)}
           onSaved={onPlaylistChange}

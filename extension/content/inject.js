@@ -414,7 +414,7 @@
             add.disabled = true;
             try {
               await send('addTrack', {
-                playlistId: Number(select.value), type: 't', id: t.track_id, bandId: t.band_id
+                playlistId: Number(select.value), kind: 't', id: t.track_id, bandId: t.band_id
               });
               add.textContent = '✓';
             } catch (err) {

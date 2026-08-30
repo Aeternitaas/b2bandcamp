@@ -13,6 +13,10 @@ interface Props {
   /** Bandcamp track ids already in the playlist, so a repeat add can be caught
    *  before it happens rather than after. */
   existingTrackIds: Set<number>
+  /** Pre-fills the link field, e.g. a link pasted straight into the playlist
+   *  view before this popup was open, so it resolves immediately instead of
+   *  waiting for the same link to be pasted a second time. */
+  initialUrl?: string
 }
 
 // detail carries what resolving a pasted link already fetched, so opening it
@@ -32,22 +36,21 @@ const TABS: { key: string; label: string }[] = [
  * Two ways in: paste a Bandcamp link, or search Bandcamp. Both land on the
  * same expanded release view, with a preview, before anything is added,
  * whether it turns out to be a whole album or a single track. Each search
- * result also has its own quick-add "+", for adding several different
- * matches straight from the list without opening any of them.
+ * result also has its own quick-add "+", for adding one straight from the
+ * list without opening it, which closes the popup the same as adding from
+ * the expanded view does.
  */
-export function AddTracks({ onClose, onAdd, existingTrackIds }: Props) {
-  const [query, setQuery] = useState('')
+export function AddTracks({ onClose, onAdd, existingTrackIds, initialUrl }: Props) {
+  const [query, setQuery] = useState(initialUrl ?? '')
   const [filter, setFilter] = useState('')
   const [results, setResults] = useState<SearchResult[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [selected, setSelected] = useState<Selection | null>(null)
   const [addingUrl, setAddingUrl] = useState(false)
-  // Per-row quick-add, keyed by "type-id", lets several different results be
-  // added straight from the list, one "+" press each, without opening any of
-  // them and without the popup closing in between.
+  // Per-row quick-add, keyed by "type-id", so the pressed row's own button
+  // can show a spinner while the popup closes out from under it on success.
   const [addingRow, setAddingRow] = useState<string | null>(null)
-  const [addedRows, setAddedRows] = useState<Set<string>>(new Set())
   // A track result already in the playlist is held here instead of added
   // straight away, so it can be confirmed rather than duplicated by accident.
   const [pendingDuplicate, setPendingDuplicate] = useState<SearchResult | null>(null)
@@ -170,7 +173,7 @@ export function AddTracks({ onClose, onAdd, existingTrackIds }: Props) {
     setError('')
     try {
       await onAdd([{ type: r.type as 'a' | 't', id: r.id, band_id: r.band_id ?? 0 }])
-      setAddedRows((prev) => new Set(prev).add(key))
+      close()
     } catch (e) {
       setError((e as Error).message)
     } finally {
@@ -198,6 +201,7 @@ export function AddTracks({ onClose, onAdd, existingTrackIds }: Props) {
           id={selected.id}
           bandId={selected.bandId}
           onAdd={onAdd}
+          onClose={close}
           onBack={() => setSelected(null)}
           existingTrackIds={existingTrackIds}
           initialDetail={selected.detail}
@@ -310,23 +314,19 @@ export function AddTracks({ onClose, onAdd, existingTrackIds }: Props) {
                     {r.type === 'a' ? 'album' : r.type === 't' ? 'track' : 'artist'}
                   </span>
 
-                  {previewable && (() => {
-                    const key = `${r.type}-${r.id}`
-                    const isAdded = addedRows.has(key)
-                    return (
-                      <button
-                        className={isAdded ? 'ghost icon' : 'icon'}
-                        disabled={addingRow !== null || isAdded}
-                        onClick={() => void quickAdd(r)}
-                        aria-label={`Add ${r.name}`}
-                        title={r.type === 'a' ? 'Add whole album' : 'Add track'}
-                      >
-                        {addingRow === key
-                          ? <div className="spin" />
-                          : <Icon name={isAdded ? 'check' : 'plus'} size={13} />}
-                      </button>
-                    )
-                  })()}
+                  {previewable && (
+                    <button
+                      className="icon"
+                      disabled={addingRow !== null}
+                      onClick={() => void quickAdd(r)}
+                      aria-label={`Add ${r.name}`}
+                      title={r.type === 'a' ? 'Add whole album' : 'Add track'}
+                    >
+                      {addingRow === `${r.type}-${r.id}`
+                        ? <div className="spin" />
+                        : <Icon name="plus" size={13} />}
+                    </button>
+                  )}
                 </div>
               )
             })}
