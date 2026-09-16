@@ -10,18 +10,31 @@ import (
 
 	"github.com/aeternitaas/b2bandcamp/server/internal/bandcamp"
 	"github.com/aeternitaas/b2bandcamp/server/internal/config"
+	"github.com/aeternitaas/b2bandcamp/server/internal/source"
 	"github.com/aeternitaas/b2bandcamp/server/internal/store"
 )
 
 type Server struct {
 	cfg *config.Config
 	st  *store.Store
-	bc  *bandcamp.Client
-	hub *playlistHub
+	// bc backs the Bandcamp-only endpoints, catalog search, wishlist and fan
+	// lookup, the audio relay. Those are what being the first-class source
+	// means, and routing them through the neutral contract would produce an
+	// interface with exactly one implementation.
+	bc      *bandcamp.Client
+	sources *source.Registry
+	hub     *playlistHub
+	// csp is assembled from the registered sources once, at startup, so the
+	// request path only ever writes a constant.
+	csp string
 }
 
-func NewServer(cfg *config.Config, st *store.Store, bc *bandcamp.Client) *Server {
-	return &Server{cfg: cfg, st: st, bc: bc, hub: newPlaylistHub()}
+func NewServer(cfg *config.Config, st *store.Store, bc *bandcamp.Client, sources *source.Registry) *Server {
+	return &Server{
+		cfg: cfg, st: st, bc: bc, sources: sources,
+		hub: newPlaylistHub(),
+		csp: buildCSP(sources.MergedCSP()),
+	}
 }
 
 // Routes builds the API mux. Static file serving is layered on top in main.
@@ -69,6 +82,9 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/users/search", s.handleSearchUsers)
 	mux.HandleFunc("GET /api/users/{username}/profile", s.handleUserProfile)
 
+	// integrations
+	mux.HandleFunc("GET /api/sources", s.handleListSources)
+
 	// bandcamp
 	mux.HandleFunc("GET /api/bc/search", s.handleBCSearch)
 	mux.HandleFunc("POST /api/bc/resolve", s.handleBCResolve)
@@ -78,8 +94,11 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/bc/stream/{trackId}", s.handleBCStream)
 	mux.HandleFunc("GET /api/bc/audio/{trackId}", s.handleBCAudio)
 
-	// cached audio analysis
+	// cached audio analysis. The {trackId} pair are the original routes, from
+	// when Bandcamp was the only source; they still resolve, as that source.
 	mux.HandleFunc("GET /api/analysis/version", s.handleAnalysisVersion)
+	mux.HandleFunc("GET /api/analysis/{source}/{sourceId}", s.handleGetAnalysis)
+	mux.HandleFunc("PUT /api/analysis/{source}/{sourceId}", s.handleSaveAnalysis)
 	mux.HandleFunc("GET /api/analysis/{trackId}", s.handleGetAnalysis)
 	mux.HandleFunc("PUT /api/analysis/{trackId}", s.handleSaveAnalysis)
 

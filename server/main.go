@@ -16,7 +16,9 @@ import (
 	"github.com/aeternitaas/b2bandcamp/server/internal/api"
 	"github.com/aeternitaas/b2bandcamp/server/internal/bandcamp"
 	"github.com/aeternitaas/b2bandcamp/server/internal/config"
+	"github.com/aeternitaas/b2bandcamp/server/internal/source"
 	"github.com/aeternitaas/b2bandcamp/server/internal/store"
+	"github.com/aeternitaas/b2bandcamp/server/internal/youtube"
 )
 
 func main() {
@@ -42,15 +44,34 @@ func main() {
 
 	go purgeSessions(ctx, st)
 
+	// Track sources are registered once, in order: registration order is match
+	// order, so Bandcamp claims any link both it and a later provider could
+	// handle. Adding an integration means adding a Register call here and
+	// nothing else.
+	bc := bandcamp.New()
+	sources := source.NewRegistry()
+	sources.Register(bandcamp.NewProvider(bc))
+
+	// YouTube registers with or without a key: without one it still adds videos
+	// by link through the keyless oEmbed endpoint, it just cannot report their
+	// duration or expand a playlist link.
+	yt := youtube.New(cfg.YouTubeAPIKey)
+	sources.Register(yt)
+	if yt.HasAPIKey() {
+		log.Print("youtube: using the Data API (durations, playlist expansion)")
+	} else {
+		log.Print("youtube: no YOUTUBE_API_KEY, falling back to oEmbed (no durations)")
+	}
+
 	// Create an instance of the apiHandler which serves the bandcamp portion of the application
-	apiHandler := api.NewServer(cfg, st, bandcamp.New()).Routes()
+	apiHandler := api.NewServer(cfg, st, bc, sources).Routes()
 
 	// Allocate and set the new, empty HTTP request multiplexer/router.
 	mux := http.NewServeMux()
 	mux.Handle("/api/", apiHandler)
 	mux.Handle("/", spaHandler(cfg.WebDir))
 
-	// Then, create and serve HTTP API server. 
+	// Then, create and serve HTTP API server.
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,
 		Handler:           mux,

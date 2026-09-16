@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/aeternitaas/b2bandcamp/server/internal/auth"
+	"github.com/aeternitaas/b2bandcamp/server/internal/source"
 	"github.com/aeternitaas/b2bandcamp/server/internal/store"
 )
 
@@ -180,14 +181,7 @@ func (s *Server) securityHeaders(next http.Handler) http.Handler {
 		h.Set("X-Frame-Options", "DENY")
 		h.Set("Referrer-Policy", "no-referrer")
 		h.Set("Cross-Origin-Opener-Policy", "same-origin")
-		// Art is served from Bandcamp's CDN (and covers may be any https image),
-		// while audio is fetched from /api/bc/stream and redirected to bcbits.
-		h.Set("Content-Security-Policy",
-			"default-src 'self'; "+
-				"img-src 'self' data: https:; "+
-				"media-src 'self' https://*.bcbits.com https://bandcamp.com blob:; "+
-				"script-src 'self'; style-src 'self' 'unsafe-inline'; "+
-				"connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'")
+		h.Set("Content-Security-Policy", s.csp)
 		next.ServeHTTP(w, r)
 	})
 }
@@ -217,4 +211,51 @@ func (s *Server) logRequests(next http.Handler) http.Handler {
 		next.ServeHTTP(rec, r)
 		log.Printf("%s %s %d %s", r.Method, r.URL.Path, rec.status, time.Since(start).Round(time.Millisecond))
 	})
+}
+
+// buildCSP assembles the policy from the origins each registered source needs,
+// so adding an integration does not also mean remembering to widen the security
+// headers by hand. It runs once at startup; the result is a constant string on
+// the request path.
+//
+// Covers may be any https image, which is why img-src is open. Everything else
+// is closed by default and opened only by a provider that asked: media-src for
+// audio this server hands over directly, script-src and frame-src for a source
+// that supplies its own player. A directive with nothing to add is left out
+// entirely rather than emitted as 'self', so registering only Bandcamp produces
+// exactly the policy that was hard-coded before.
+func buildCSP(m source.CSP) string {
+	var b strings.Builder
+	b.WriteString("default-src 'self'; ")
+	b.WriteString("img-src 'self' data: https:; ")
+
+	b.WriteString("media-src 'self'")
+	writeOrigins(&b, m.Media)
+	b.WriteString(" blob:; ")
+
+	b.WriteString("script-src 'self'")
+	writeOrigins(&b, m.Script)
+	b.WriteString("; style-src 'self' 'unsafe-inline'; ")
+
+	b.WriteString("connect-src 'self'")
+	writeOrigins(&b, m.Connect)
+	b.WriteString("; ")
+
+	if len(m.Frame) > 0 {
+		b.WriteString("frame-src")
+		writeOrigins(&b, m.Frame)
+		b.WriteString("; ")
+	}
+
+	// frame-ancestors controls who may frame this app, which is nobody, and is
+	// unrelated to the frame-src above.
+	b.WriteString("frame-ancestors 'none'; base-uri 'self'; form-action 'self'")
+	return b.String()
+}
+
+func writeOrigins(b *strings.Builder, origins []string) {
+	for _, o := range origins {
+		b.WriteByte(' ')
+		b.WriteString(o)
+	}
 }

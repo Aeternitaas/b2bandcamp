@@ -39,13 +39,13 @@ To close the instance to new sign-ups once your accounts exist, set
 
 **Playlists**
 - Create, rename, describe, and delete playlists
-- Configurable track columns: tempo, length and contributor can be shown,
-  hidden, reordered (drag the heading) and resized (drag its right edge); the
-  layout is remembered per browser
+- Configurable track columns. You can show, hide, reorder (drag the heading)
+  and resize (drag its right edge) tempo, length and contributor. Each browser
+  keeps its own layout.
 - Tempo is editable inline, because detection gets tracks wrong
 - Filter by contributor, with original track numbering preserved
 - Set cover art by URL, or fall back to the first track's album art
-- Drag to reorder playlists; sort by name, recent activity, or track count
+- Drag to reorder playlists, or sort by name, recent activity, or track count
 - Drag to reorder tracks (works with touch, mouse, and keyboard)
 
 **Adding music**
@@ -55,7 +55,7 @@ To close the instance to new sign-ups once your accounts exist, set
 - Wishlist albums offer both explicitly rather than guessing which you meant
 
 **Wishlist sidebar**
-- Enter any Bandcamp username (or display name, or profile link) and browse
+- Enter any Bandcamp username, profile name or profile link, and browse
   their wishlist in a toggleable side panel.
 - Add a wishlisted album whole, or open it and add individual tracks
 - Pages through wishlists of any size
@@ -64,7 +64,7 @@ To close the instance to new sign-ups once your accounts exist, set
 
 | Visibility | Who can view | Who can edit |
 |---|---|---|
-| `private` | Owner + invited collaborators | Same; the share link stops working |
+| `private` | Owner + invited collaborators | Same. The share link stops working |
 | `shared` | Invited collaborators, or anyone with the link | Owner + invited collaborators |
 | `public` | Anyone (listed on the owner's profile) | Owner, invitees, or anyone with the link |
 
@@ -77,8 +77,8 @@ Collaborators can be added two ways:
   signed in enrols you as a named collaborator. Under `public`, it grants
   editing outright and edits may be anonymous.
 
-Public playlists are readable without any link (that is what makes them
-listable on a profile); editing them still requires the link or an invite.
+Anyone can read a public playlist without a link, which is what lets a profile
+list it. Editing one still needs the link or an invite.
 
 **Player**
 - Streams Bandcamp's public 128kbps previews, the same audio the Bandcamp
@@ -89,13 +89,13 @@ listable on a profile); editing them still requires the link or an invite.
   the source album, a link out to Bandcamp, and one-tap saving to another playlist
 
 **Accounts**
-- Settings page for changing email and password (both require the current
-  password; changing the password signs out every other device)
+- Settings page for changing email and password. Both need the current
+  password, and a password change signs out every other device.
 - Optionally link a Bandcamp profile and adopt its picture as your avatar
-- Public profile page listing your public playlists; owners can change any
+- Public profile page listing your public playlists. An owner can change any
   playlist's visibility from there
-- Tracks are attributed to whoever added them, with their avatar (or coloured
-  initials derived from their account id)
+- Each track credits whoever added it, with their avatar, or with coloured
+  initials derived from their account id
 - API tokens for non-browser clients (see **Browser extension** below), listed
   and revocable from Settings
 
@@ -113,28 +113,32 @@ API it talks to (the same one the web app uses, nothing extension-only).
 
 ## Security
 
-Passwords are hashed with **Argon2id** (64 MiB, 3 iterations, parallelism 2)
-using a per-password random salt, stored in PHC string format so the cost
-parameters can be raised later without invalidating existing hashes. Login
-compares in constant time and spends equivalent CPU on unknown usernames, so
-response timing does not reveal which accounts exist.
+The server hashes passwords with **Argon2id** (64 MiB, 3 iterations,
+parallelism 2) and a per-password random salt. It writes them in PHC string
+format, so you can raise the cost parameters later without invalidating
+existing hashes. Login compares in constant time, and spends the same CPU on
+unknown usernames. Response timing therefore reveals nothing about which
+accounts exist.
 
-Session tokens are 256 bits of CSPRNG output. Only their SHA-256 is stored, so
-a database leak does not yield usable sessions. They are delivered in a cookie
-that is `HttpOnly` (unreachable from JavaScript), `SameSite=Lax`, and `Secure`
-when `COOKIE_SECURE=true`. Expired sessions are purged hourly.
+Session tokens hold 256 bits of CSPRNG output. The database keeps only their
+SHA-256, so a leak yields no usable session. The server delivers them in a
+cookie marked `HttpOnly`, which puts it out of reach of JavaScript, plus
+`SameSite=Lax`, plus `Secure` when `COOKIE_SECURE=true`. A job purges expired
+sessions every hour.
 
 Share tokens are 10 characters drawn with rejection sampling from a 57-symbol
-alphabet (~58 bits), which keeps links short enough to paste and retype while
-leaving guessing infeasible against the rate limiter. Lookups match on the
-SHA-256 hash. The raw token is **also** stored so an owner can retrieve their
-own invite link instead of being forced to rotate it, a deliberate trade: it
-means the database holds a working credential, which is an acceptable position
-for a single-box self-hosted deployment but would not be for a shared host.
+alphabet (~58 bits). That keeps a link short enough to paste and to retype, and
+still leaves guessing impractical against the rate limiter. Lookups match on the
+SHA-256 hash.
+
+The database **also** holds the raw token, so an owner can get their own invite
+link back instead of rotating it. This is a deliberate trade. It means the
+database holds a working credential. That is acceptable for a single-box
+self-hosted deployment, and it would not be for a shared host.
 
 Other measures:
 
-- **CSRF**: double-submit cookie; every state-changing request must echo the
+- **CSRF**: a double-submit cookie. Every state-changing request must echo the
   token in an `X-CSRF-Token` header. This matters because public playlists
   accept edits without a session.
 - **SQL injection**: every query uses bound parameters. Reorder operations are
@@ -146,8 +150,8 @@ Other measures:
 - **Rate limiting**: on sign-in, sign-up, and outbound Bandcamp calls.
 - **Headers**: CSP, `X-Content-Type-Options`, `X-Frame-Options: DENY`,
   `Referrer-Policy: no-referrer`.
-- **Cover art URLs** are restricted to `https://` so a playlist cannot smuggle
-  `javascript:` or `data:` URLs into another viewer's browser.
+- **Cover art URLs** must use `https://`, so a playlist cannot carry a
+  `javascript:` or `data:` URL into another viewer's browser.
 
 If you expose this beyond localhost, put it behind a TLS-terminating reverse
 proxy and set `COOKIE_SECURE=true`.
@@ -167,7 +171,7 @@ Three settings matter once a reverse proxy is in front:
 |---|---|
 | `COOKIE_SECURE=true` | Session and CSRF cookies are then only sent over HTTPS |
 | `TRUSTED_PROXIES=private` | Restores per-user rate limiting (see below) |
-| `PUBLIC_BASE_URL` | Optional; makes copied share links always name your domain |
+| `PUBLIC_BASE_URL` | Optional. Makes copied share links always name your domain |
 
 **`TRUSTED_PROXIES` is not optional in practice.** Behind a proxy every request
 arrives from the proxy's address, so all users land in the same rate-limit
@@ -198,9 +202,10 @@ server {
 
 Two caveats:
 
-- **Serve it at a domain root, not a subpath.** The built assets are referenced
-  from `/assets/...` and the client routes are absolute, so `example.com/b2b/`
-  would need a Vite `base` and a router `basename`. Say the word if you need it.
+- **Serve it at a domain root, not a subpath.** The built assets point at
+  `/assets/...`, and the client routes are absolute. `example.com/b2b/` would
+  therefore need a Vite `base` and a router `basename`. Say the word if you
+  need it.
 - **The audio proxy streams through the server** when the analysis panel is
   open, so give it a generous `proxy_read_timeout` if you put buffering limits
   in front of it.
@@ -210,12 +215,12 @@ Two caveats:
 ## How the Bandcamp integration works
 
 Bandcamp has no public playlist API, so this app uses the same unauthenticated
-endpoints that back Bandcamp's own web and mobile clients. All were verified
-against live responses while building this:
+endpoints that back Bandcamp's own web and mobile clients. Building this app
+checked every one of them against live responses:
 
 | Purpose | Endpoint |
 |---|---|
-| Search (also used to resolve fans by display name) | `POST /api/bcsearch_public_api/1/autocomplete_elastic` |
+| Search (also resolves fans by profile name) | `POST /api/bcsearch_public_api/1/autocomplete_elastic` |
 | URL → ids | the page's `bc-page-properties` meta tag |
 | Album/track detail | `GET /api/mobile/24/tralbum_details` |
 | Wishlist | `POST /api/fancollection/1/wishlist_items` |
@@ -230,26 +235,27 @@ redirects the browser to it. Audio bytes go straight from Bandcamp's CDN to the
 listener and never transit this server.
 
 **Album pages no longer inline track data.** The `data-tralbum` blob that older
-scrapers rely on is gone from Bandcamp's HTML; only identifiers remain in the
-page head. This app reads just those identifiers and gets everything else from
-the mobile API, which is both lighter and more stable.
+scrapers rely on has left Bandcamp's HTML. Only identifiers remain in the page
+head. This app reads those identifiers alone, and gets everything else from the
+mobile API, which is both lighter and more stable.
 
-Metadata is cached in memory: 5 minutes for release detail (short, because it
-carries signed stream URLs), 30 minutes for URL→id mappings.
+The server caches metadata in memory. Release detail lasts 5 minutes, which is
+short because it carries signed stream URLs. URL to id mappings last 30
+minutes.
 
 **Analysis needs a proxy.** Bandcamp's CDN sends no CORS headers, so an
-`<audio>` element can play a stream but Web Audio only ever sees silence from
+`<audio>` element can play a stream, but Web Audio only ever hears silence from
 it. `/api/bc/audio/{trackId}` therefore relays the bytes same-origin, which is
-what makes the waveform, BPM and key detection possible. It is used only when
-the analysis panel is open; ordinary playback still uses the redirect.
+what makes the waveform, BPM and key detection possible. The app calls it only
+while the analysis panel is open. Ordinary playback still uses the redirect.
 
 **`wishlist_count` is unreliable.** Some profile pages report `0` even when the
-wishlist is populated, so the UI reports how many items it actually loaded
-rather than trusting that number.
+wishlist holds items. The UI therefore reports how many items it loaded, instead
+of trusting that number.
 
-**Known limitation:** artists using a custom domain instead of a
-`*.bandcamp.com` address are rejected by the URL resolver, deliberately, since
-accepting arbitrary hosts would make that endpoint an SSRF primitive. Use the
+**Known limitation:** the URL resolver refuses an artist who uses a custom
+domain instead of a `*.bandcamp.com` address. This is deliberate. Accepting
+arbitrary hosts would turn that endpoint into an SSRF primitive. Use the
 artist's `*.bandcamp.com` URL, or find the release through search.
 
 This app only ever touches public preview streams. It does not access purchased
@@ -261,11 +267,11 @@ you like from the artists.
 ### Icons
 
 The UI contains no emoji. Emoji glyphs come from the OS font, so the same
-character renders differently (or not at all) across platforms and is announced
-unpredictably by screen readers. Icons are inline SVG from
-[Feather](https://feathericons.com) (MIT), copied into `src/components/Icon.tsx`
-rather than fetched; the CSP forbids external assets and the PWA must render
-offline.
+character renders differently across platforms, or not at all, and screen
+readers announce it unpredictably. The icons are inline SVG from
+[Feather](https://feathericons.com) (MIT). They live in
+`src/components/Icon.tsx` instead of loading over the network, because the CSP
+forbids external assets and the PWA must render offline.
 
 ---
 
@@ -329,13 +335,18 @@ web/
 ### API
 
 **Full reference, with request/response bodies and examples: [`docs/API.md`](docs/API.md).**
-This is the same API the web app itself uses, nothing is held back for an
-"internal" surface, which is what makes the browser extension (and anything
-else you might build) possible without a second, parallel API.
+The web app uses this same API. No endpoint sits behind an "internal" surface.
+That is what makes the browser extension, and anything else you build,
+possible without a second parallel API.
+
+Two more references sit alongside it: [`docs/SCHEMA.md`](docs/SCHEMA.md) for the
+database tables and how the server applies migrations, and
+[`docs/INTEGRATIONS.md`](docs/INTEGRATIONS.md) for how a track source (Bandcamp,
+YouTube) plugs in and what it takes to add another.
 
 Quick orientation, every endpoint is under `/api`. Requests authenticate with
 either the browser's session cookie (plus `X-CSRF-Token` on any mutation) or
-an `Authorization: Bearer <token>` header (see `POST /api/auth/tokens`);
+an `Authorization: Bearer <token>` header (see `POST /api/auth/tokens`).
 share-link access additionally takes `X-Share-Token`.
 
 ```
@@ -396,7 +407,7 @@ thing most likely to break this app: Bandcamp changing a response shape.
 |---|---|---|
 | `PORT` | `9185` | Listen port |
 | `WEB_DIR` | `./web` | Directory of built frontend files |
-| `MYSQL_DSN` | - | Full DSN; overrides the parts below |
+| `MYSQL_DSN` | - | Full DSN. Overrides the parts below |
 | `MYSQL_HOST` / `MYSQL_PORT` | `127.0.0.1` / `3306` | Database address |
 | `MYSQL_DATABASE` / `MYSQL_USER` / `MYSQL_PASSWORD` | `b2bandcamp` / `b2bandcamp` / - | Credentials |
 | `SESSION_COOKIE` / `CSRF_COOKIE` | `b2bandcamp_session` / `b2bandcamp_csrf` | Cookie names |

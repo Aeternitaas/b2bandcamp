@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/aeternitaas/b2bandcamp/server/internal/bandcamp"
 	"github.com/aeternitaas/b2bandcamp/server/internal/store"
 )
 
@@ -18,16 +19,41 @@ const analyzerVersion = store.AnalyzerVersion
 // stuff arbitrary data into the column.
 const maxPeaksBytes = 2048
 
+// analysisTarget reads the track a request is about. Two route shapes reach
+// here: /api/analysis/{source}/{sourceId}, and the original
+// /api/analysis/{trackId}, which predates there being more than one source and
+// so can only ever have meant Bandcamp.
+func (s *Server) analysisTarget(w http.ResponseWriter, r *http.Request) (src, id string, ok bool) {
+	if src = r.PathValue("source"); src != "" {
+		id = r.PathValue("sourceId")
+		if _, known := s.sources.ByID(src); !known {
+			writeErr(w, http.StatusBadRequest, "unknown source "+src)
+			return "", "", false
+		}
+		if id == "" || len(id) > 64 {
+			writeErr(w, http.StatusBadRequest, "invalid track id")
+			return "", "", false
+		}
+		return src, id, true
+	}
+
+	trackID, valid := pathInt(r, "trackId")
+	if !valid {
+		writeErr(w, http.StatusBadRequest, "invalid track id")
+		return "", "", false
+	}
+	return bandcamp.SourceID, strconv.FormatInt(trackID, 10), true
+}
+
 // handleGetAnalysis serves a cached analysis so the client can skip downloading
 // and decoding the audio entirely.
 func (s *Server) handleGetAnalysis(w http.ResponseWriter, r *http.Request) {
-	trackID, ok := pathInt(r, "trackId")
+	src, id, ok := s.analysisTarget(w, r)
 	if !ok {
-		writeErr(w, http.StatusBadRequest, "invalid track id")
 		return
 	}
 
-	a, err := s.st.AnalysisByTrack(r.Context(), trackID, analyzerVersion)
+	a, err := s.st.AnalysisBySource(r.Context(), src, id, analyzerVersion)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeErr(w, http.StatusNotFound, "not analysed yet")
@@ -38,7 +64,7 @@ func (s *Server) handleGetAnalysis(w http.ResponseWriter, r *http.Request) {
 	}
 
 	a.PeaksB64 = base64.StdEncoding.EncodeToString(a.Peaks)
-	// The audio behind a Bandcamp track id never changes, so this is safe to
+	// The audio behind a given track id never changes, so this is safe to
 	// hold on to; a version bump changes the answer, not the URL.
 	w.Header().Set("Cache-Control", "private, max-age=300")
 	writeJSON(w, http.StatusOK, a)
@@ -58,9 +84,14 @@ func (s *Server) handleSaveAnalysis(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	trackID, ok := pathInt(r, "trackId")
+	src, id, ok := s.analysisTarget(w, r)
 	if !ok {
-		writeErr(w, http.StatusBadRequest, "invalid track id")
+		return
+	}
+	// Refuse results for a source whose audio this server cannot obtain: they
+	// could not have been measured, and the numbers drive a visible BPM column.
+	if p, known := s.sources.ByID(src); known && !p.Caps().Analyze {
+		writeErr(w, http.StatusBadRequest, src+" tracks cannot be analysed")
 		return
 	}
 
@@ -98,7 +129,8 @@ func (s *Server) handleSaveAnalysis(w http.ResponseWriter, r *http.Request) {
 	}
 
 	record := &store.TrackAnalysis{
-		TrackID:         trackID,
+		Source:          src,
+		SourceID:        id,
 		AnalyzerVersion: analyzerVersion,
 		BPM:             req.BPM,
 		BPMConfidence:   req.BPMConfidence,
@@ -123,5 +155,3 @@ func (s *Server) handleAnalysisVersion(w http.ResponseWriter, r *http.Request) {
 	_ = r
 	writeJSON(w, http.StatusOK, map[string]int{"analyzer_version": analyzerVersion})
 }
-
-var _ = strconv.Itoa

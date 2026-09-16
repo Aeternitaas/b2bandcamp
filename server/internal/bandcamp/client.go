@@ -25,6 +25,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/aeternitaas/b2bandcamp/server/internal/source"
 )
 
 const (
@@ -40,7 +42,10 @@ const (
 	fanTTL    = 10 * time.Minute
 )
 
-var ErrNotFound = errors.New("bandcamp: not found")
+// ErrNotFound wraps source.ErrNotFound so callers can test for "gone" once,
+// without knowing which provider produced the error. errors.Is against either
+// this or source.ErrNotFound matches.
+var ErrNotFound = fmt.Errorf("bandcamp: %w", source.ErrNotFound)
 
 type Client struct {
 	http  *http.Client

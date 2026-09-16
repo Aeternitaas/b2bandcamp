@@ -15,20 +15,22 @@ import (
 //	    which fixed tracks being reported at half their real tempo
 const AnalyzerVersion = 3
 
-// AnalysisByTrack returns the cached analysis for a Bandcamp track, or
-// ErrNotFound. Rows produced by an older analyzer are treated as absent so a
-// change to the detection algorithm re-derives rather than serving stale data.
-func (s *Store) AnalysisByTrack(ctx context.Context, trackID int64, minVersion int) (*TrackAnalysis, error) {
+// AnalysisBySource returns the cached analysis for one track, identified the
+// same way a playlist row is, or ErrNotFound. Rows produced by an older analyzer
+// are treated as absent so a change to the detection algorithm re-derives rather
+// than serving stale data.
+func (s *Store) AnalysisBySource(ctx context.Context, source, sourceID string, minVersion int) (*TrackAnalysis, error) {
 	var a TrackAnalysis
 	var keyName, keyCamelot, keyScale sql.NullString
 
 	err := s.DB.QueryRowContext(ctx,
-		`SELECT bc_track_id, analyzer_version, bpm, bpm_confidence,
+		`SELECT source, source_id, analyzer_version, bpm, bpm_confidence,
 		        key_name, key_camelot, key_tonic, key_scale, key_confidence,
 		        peaks, analyzed_at
 		   FROM track_analysis
-		  WHERE bc_track_id = ? AND analyzer_version >= ?`, trackID, minVersion).
-		Scan(&a.TrackID, &a.AnalyzerVersion, &a.BPM, &a.BPMConfidence,
+		  WHERE source = ? AND source_id = ? AND analyzer_version >= ?`,
+		source, sourceID, minVersion).
+		Scan(&a.Source, &a.SourceID, &a.AnalyzerVersion, &a.BPM, &a.BPMConfidence,
 			&keyName, &keyCamelot, &a.KeyTonic, &keyScale, &a.KeyConfidence,
 			&a.Peaks, &a.AnalyzedAt)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -48,9 +50,9 @@ func (s *Store) AnalysisByTrack(ctx context.Context, trackID int64, minVersion i
 func (s *Store) SaveAnalysis(ctx context.Context, a *TrackAnalysis) error {
 	_, err := s.DB.ExecContext(ctx,
 		`INSERT INTO track_analysis
-		   (bc_track_id, analyzer_version, bpm, bpm_confidence, key_name, key_camelot,
+		   (source, source_id, analyzer_version, bpm, bpm_confidence, key_name, key_camelot,
 		    key_tonic, key_scale, key_confidence, peaks, analyzed_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		 ON DUPLICATE KEY UPDATE
 		   analyzer_version = VALUES(analyzer_version),
 		   bpm              = VALUES(bpm),
@@ -62,7 +64,7 @@ func (s *Store) SaveAnalysis(ctx context.Context, a *TrackAnalysis) error {
 		   key_confidence   = VALUES(key_confidence),
 		   peaks            = VALUES(peaks),
 		   analyzed_at      = VALUES(analyzed_at)`,
-		a.TrackID, a.AnalyzerVersion, a.BPM, a.BPMConfidence,
+		a.Source, a.SourceID, a.AnalyzerVersion, a.BPM, a.BPMConfidence,
 		nullable(a.KeyName), nullable(a.KeyCamelot), a.KeyTonic, nullable(a.KeyScale),
 		a.KeyConfidence, a.Peaks, time.Now().UTC())
 	return err

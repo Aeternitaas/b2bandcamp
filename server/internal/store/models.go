@@ -55,6 +55,10 @@ type Playlist struct {
 	// Art of the first track that has any, so list views can show a cover
 	// without loading the whole tracklist. cover_url overrides it.
 	CoverArtID *int64 `json:"cover_art_id"`
+	// Set instead of CoverArtID when that first track's art is a plain URL, as
+	// it is for sources that do not expose an artwork id. Both describe the
+	// same track, so a client prefers whichever is populated.
+	CoverArtURL     string     `json:"cover_art_url"`
 	Visibility      Visibility `json:"visibility"`
 	HasShareLink    bool       `json:"has_share_link"`
 	SortIndex       int        `json:"sort_index"`
@@ -68,10 +72,20 @@ type Playlist struct {
 }
 
 type Track struct {
-	ID         int64     `json:"id"`
-	PlaylistID int64     `json:"playlist_id"`
-	Position   int       `json:"position"`
-	TrackID    int64     `json:"bc_track_id"`
+	ID         int64 `json:"id"`
+	PlaylistID int64 `json:"playlist_id"`
+	Position   int   `json:"position"`
+
+	// Source names the integration this row came from ("bandcamp", "youtube"),
+	// SourceID is that integration's own identifier for the track and
+	// SourceRef whatever else it needs to act on it later. Together they are
+	// the row's real identity; the bc_* fields below are the Bandcamp-only
+	// identity they replace, kept so existing clients keep working.
+	Source    string `json:"source"`
+	SourceID  string `json:"source_id"`
+	SourceRef string `json:"source_ref,omitempty"`
+
+	TrackID    *int64    `json:"bc_track_id"`
 	AlbumID    *int64    `json:"bc_album_id"`
 	BandID     *int64    `json:"bc_band_id"`
 	Title      string    `json:"title"`
@@ -85,9 +99,12 @@ type Track struct {
 	// Camelot code entered by hand, or empty to use what analysis found.
 	KeyOverride string   `json:"key_override"`
 	// Free-text, hand-entered; empty when nobody has written one.
-	Note       string    `json:"note"`
-	ArtID      *int64    `json:"art_id"`
-	TrackURL   string    `json:"track_url"`
+	Note     string    `json:"note"`
+	ArtID    *int64    `json:"art_id"`
+	// ArtURL is set by sources that hand out an image URL rather than an id.
+	// Clients prefer it when present and fall back to deriving one from ArtID.
+	ArtURL   string    `json:"art_url"`
+	TrackURL string    `json:"track_url"`
 	AddedBy    *int64    `json:"added_by"`
 	AddedAt    time.Time `json:"added_at"`
 
@@ -106,7 +123,8 @@ type Track struct {
 // stored as one byte per bucket, the waveform is drawn a few pixels tall, so
 // 8 bits of amplitude is plenty and keeps a row well under a kilobyte.
 type TrackAnalysis struct {
-	TrackID         int64     `json:"bc_track_id"`
+	Source          string    `json:"source"`
+	SourceID        string    `json:"source_id"`
 	AnalyzerVersion int       `json:"analyzer_version"`
 	BPM             *float64  `json:"bpm"`
 	BPMConfidence   *float64  `json:"bpm_confidence"`
@@ -130,6 +148,7 @@ type ShareLink struct {
 	Token        string     `json:"token"`
 	CoverURL     string     `json:"cover_url"`
 	CoverArtID   *int64     `json:"cover_art_id"`
+	CoverArtURL  string     `json:"cover_art_url"`
 	TrackCount   int        `json:"track_count"`
 	Collaborators int       `json:"collaborators"`
 	UpdatedAt    time.Time  `json:"updated_at"`

@@ -2,10 +2,14 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
 
+	"github.com/aeternitaas/b2bandcamp/server/internal/bandcamp"
+	"github.com/aeternitaas/b2bandcamp/server/internal/source"
 	"github.com/aeternitaas/b2bandcamp/server/internal/store"
 )
 
@@ -182,10 +186,32 @@ func (s *Server) handleReorderPlaylists(w http.ResponseWriter, r *http.Request) 
 
 // trackRef identifies something on Bandcamp to add: a whole album ("a", which
 // expands to every streamable track) or a single track ("t").
+//
+// This is the wire shape clients already send. It is Bandcamp-specific because
+// Bandcamp was the only source when it was defined; it is translated to a
+// neutral source.Ref on the way in, so the handler below no longer knows what
+// a band id is.
 type trackRef struct {
 	Type   string `json:"type"`
 	ID     int64  `json:"id"`
 	BandID int64  `json:"band_id"`
+}
+
+// ref translates the legacy Bandcamp-shaped item into the neutral form, after
+// checking it as strictly as the handler used to.
+func (t trackRef) ref() (source.Ref, error) {
+	if t.Type != "a" && t.Type != "t" {
+		return source.Ref{}, errors.New("item type must be 'a' or 't'")
+	}
+	if t.ID <= 0 || t.BandID <= 0 {
+		return source.Ref{}, errors.New("item id and band_id are required")
+	}
+	return source.Ref{
+		Source: bandcamp.SourceID,
+		Kind:   t.Type,
+		ID:     strconv.FormatInt(t.ID, 10),
+		Extra:  strconv.FormatInt(t.BandID, 10),
+	}, nil
 }
 
 func (s *Server) handleAddTracks(w http.ResponseWriter, r *http.Request) {
@@ -202,56 +228,60 @@ func (s *Server) handleAddTracks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// A pasted URL is just another way of naming a ref.
+	refs := make([]source.Ref, 0, len(req.Items)+1)
+
+	// A pasted URL is just another way of naming a ref. Which integration owns
+	// the link is decided by the registry, so a source added later needs no
+	// change here.
 	if u := strings.TrimSpace(req.URL); u != "" {
-		typ, id, bandID, err := s.bc.Resolve(r.Context(), u)
+		p, ok := s.sources.ForURL(u)
+		if !ok {
+			writeErr(w, http.StatusBadRequest, "no integration handles that link")
+			return
+		}
+		ref, err := p.Resolve(r.Context(), u)
 		if err != nil {
 			writeErr(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		req.Items = append(req.Items, trackRef{Type: typ, ID: id, BandID: bandID})
+		refs = append(refs, ref)
 	}
 
-	if len(req.Items) == 0 {
+	for _, item := range req.Items {
+		ref, err := item.ref()
+		if err != nil {
+			writeErr(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		refs = append(refs, ref)
+	}
+
+	if len(refs) == 0 {
 		writeErr(w, http.StatusBadRequest, "nothing to add")
 		return
 	}
-	if len(req.Items) > maxAddPerRequest {
+	if len(refs) > maxAddPerRequest {
 		writeErr(w, http.StatusBadRequest, "too many items in one request")
 		return
 	}
 
 	var toAdd []*store.Track
-	for _, ref := range req.Items {
-		if ref.Type != "a" && ref.Type != "t" {
-			writeErr(w, http.StatusBadRequest, "item type must be 'a' or 't'")
+	for _, ref := range refs {
+		p, ok := s.sources.ByID(ref.Source)
+		if !ok {
+			writeErr(w, http.StatusBadRequest, "unknown source "+ref.Source)
 			return
 		}
-		if ref.ID <= 0 || ref.BandID <= 0 {
-			writeErr(w, http.StatusBadRequest, "item id and band_id are required")
-			return
-		}
-
-		detail, err := s.bc.Details(r.Context(), ref.Type, ref.ID, ref.BandID)
+		tracks, err := p.Expand(r.Context(), ref)
 		if err != nil {
 			fail(w, err)
 			return
 		}
-		for _, t := range detail.Tracks {
-			if !t.Streamable {
+		for _, t := range tracks {
+			if !t.Playable {
 				continue // no preview stream, so it could never be played back
 			}
-			toAdd = append(toAdd, &store.Track{
-				TrackID:    t.TrackID,
-				AlbumID:    t.AlbumID,
-				BandID:     &t.BandID,
-				Title:      t.Title,
-				Artist:     t.Artist,
-				AlbumTitle: t.AlbumTitle,
-				Duration:   t.Duration,
-				ArtID:      t.ArtID,
-				TrackURL:   t.TrackURL,
-			})
+			toAdd = append(toAdd, storeTrack(t, ref.Source))
 		}
 	}
 
@@ -502,4 +532,43 @@ func normalizeCamelot(input string) string {
 // to smuggle javascript: or data: URLs into another viewer's browser.
 func isSafeImageURL(s string) bool {
 	return strings.HasPrefix(strings.ToLower(s), "https://")
+}
+
+// storeTrack maps a provider's neutral track onto a playlist row.
+//
+// Both identities are written: source/source_id/source_ref, which is what every
+// source has, and the bc_* columns, which only Bandcamp can fill. The legacy
+// columns stay populated so existing clients keep rendering art and playing
+// audio while they migrate to the neutral fields; a source whose ids are not
+// numbers simply leaves them null.
+func storeTrack(t source.Track, sourceID string) *store.Track {
+	return &store.Track{
+		Source:     sourceID,
+		SourceID:   t.SourceID,
+		SourceRef:  t.SourceRef,
+		TrackID:    optID(t.SourceID),
+		BandID:     optID(t.SourceRef),
+		AlbumID:    optID(t.AlbumRef),
+		ArtID:      optID(t.ArtRef),
+		ArtURL:     t.ArtURL,
+		Title:      t.Title,
+		Artist:     t.Artist,
+		AlbumTitle: t.AlbumTitle,
+		Duration:   t.Duration,
+		TrackURL:   t.PageURL,
+	}
+}
+
+// optID parses one of a provider's optional numeric ids, treating anything
+// unparseable as absent rather than as an error: these are display and linking
+// aids, not identity.
+func optID(s string) *int64 {
+	if s == "" {
+		return nil
+	}
+	v, err := strconv.ParseInt(s, 10, 64)
+	if err != nil {
+		return nil
+	}
+	return &v
 }

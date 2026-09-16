@@ -12,8 +12,11 @@ const playlistSelect = `
 SELECT p.id, p.owner_id, u.username, p.title, COALESCE(p.description, ''),
        COALESCE(p.cover_url, ''), p.visibility, p.share_token_hash IS NOT NULL,
        (SELECT ft.art_id FROM playlist_tracks ft
-         WHERE ft.playlist_id = p.id AND ft.art_id IS NOT NULL
+         WHERE ft.playlist_id = p.id AND (ft.art_url IS NOT NULL OR ft.art_id IS NOT NULL)
          ORDER BY ft.position ASC, ft.id ASC LIMIT 1) AS cover_art_id,
+       COALESCE((SELECT ft.art_url FROM playlist_tracks ft
+         WHERE ft.playlist_id = p.id AND (ft.art_url IS NOT NULL OR ft.art_id IS NOT NULL)
+         ORDER BY ft.position ASC, ft.id ASC LIMIT 1), '') AS cover_art_url,
        p.sort_index,
        COALESCE(t.cnt, 0), COALESCE(t.dur, 0), p.created_at, p.updated_at
   FROM playlists p
@@ -26,7 +29,7 @@ SELECT p.id, p.owner_id, u.username, p.title, COALESCE(p.description, ''),
 func scanPlaylist(row interface{ Scan(...any) error }) (*Playlist, error) {
 	var p Playlist
 	err := row.Scan(&p.ID, &p.OwnerID, &p.OwnerName, &p.Title, &p.Description,
-		&p.CoverURL, &p.Visibility, &p.HasShareLink, &p.CoverArtID, &p.SortIndex,
+		&p.CoverURL, &p.Visibility, &p.HasShareLink, &p.CoverArtID, &p.CoverArtURL, &p.SortIndex,
 		&p.TrackCount, &p.DurationSeconds, &p.CreatedAt, &p.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
@@ -227,8 +230,11 @@ func (s *Store) SharesByOwner(ctx context.Context, ownerID int64) ([]*ShareLink,
 	rows, err := s.DB.QueryContext(ctx, `
 SELECT p.id, p.title, p.visibility, p.share_token, COALESCE(p.cover_url, ''),
        (SELECT ft.art_id FROM playlist_tracks ft
-         WHERE ft.playlist_id = p.id AND ft.art_id IS NOT NULL
+         WHERE ft.playlist_id = p.id AND (ft.art_url IS NOT NULL OR ft.art_id IS NOT NULL)
          ORDER BY ft.position ASC, ft.id ASC LIMIT 1),
+       COALESCE((SELECT ft.art_url FROM playlist_tracks ft
+         WHERE ft.playlist_id = p.id AND (ft.art_url IS NOT NULL OR ft.art_id IS NOT NULL)
+         ORDER BY ft.position ASC, ft.id ASC LIMIT 1), ''),
        COALESCE(t.cnt, 0),
        COALESCE(c.cnt, 0),
        p.updated_at
@@ -248,7 +254,7 @@ SELECT p.id, p.title, p.visibility, p.share_token, COALESCE(p.cover_url, ''),
 	for rows.Next() {
 		var l ShareLink
 		if err := rows.Scan(&l.PlaylistID, &l.Title, &l.Visibility, &l.Token, &l.CoverURL,
-			&l.CoverArtID, &l.TrackCount, &l.Collaborators, &l.UpdatedAt); err != nil {
+			&l.CoverArtID, &l.CoverArtURL, &l.TrackCount, &l.Collaborators, &l.UpdatedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, &l)
@@ -262,16 +268,18 @@ func (s *Store) Tracks(ctx context.Context, playlistID int64) ([]*Track, error) 
 	// The adder and the cached analysis are joined in so the playlist view can
 	// show attribution, tempo and key without a round trip per row.
 	rows, err := s.DB.QueryContext(ctx,
-		`SELECT t.id, t.playlist_id, t.position, t.bc_track_id, t.bc_album_id, t.bc_band_id,
+		`SELECT t.id, t.playlist_id, t.position,
+		        t.source, t.source_id, COALESCE(t.source_ref, ''),
+		        t.bc_track_id, t.bc_album_id, t.bc_band_id,
 		        t.title, t.artist, COALESCE(t.album_title, ''), t.duration, t.bpm,
 		        COALESCE(t.key_override, ''), COALESCE(t.note, ''), t.art_id,
-		        t.track_url, t.added_by, t.added_at,
+		        COALESCE(t.art_url, ''), t.track_url, t.added_by, t.added_at,
 		        COALESCE(u.username, ''), COALESCE(u.avatar_url, ''),
 		        a.bpm, COALESCE(a.key_camelot, ''), COALESCE(a.key_name, '')
 		   FROM playlist_tracks t
 		   LEFT JOIN users u ON u.id = t.added_by
 		   LEFT JOIN track_analysis a
-		          ON a.bc_track_id = t.bc_track_id
+		          ON a.source = t.source AND a.source_id = t.source_id
 		         AND a.analyzer_version >= ?
 		  WHERE t.playlist_id = ? ORDER BY t.position ASC, t.id ASC`,
 		AnalyzerVersion, playlistID)
@@ -283,9 +291,11 @@ func (s *Store) Tracks(ctx context.Context, playlistID int64) ([]*Track, error) 
 	out := []*Track{}
 	for rows.Next() {
 		var t Track
-		if err := rows.Scan(&t.ID, &t.PlaylistID, &t.Position, &t.TrackID, &t.AlbumID,
+		if err := rows.Scan(&t.ID, &t.PlaylistID, &t.Position,
+			&t.Source, &t.SourceID, &t.SourceRef,
+			&t.TrackID, &t.AlbumID,
 			&t.BandID, &t.Title, &t.Artist, &t.AlbumTitle, &t.Duration, &t.BPM,
-			&t.KeyOverride, &t.Note, &t.ArtID,
+			&t.KeyOverride, &t.Note, &t.ArtID, &t.ArtURL,
 			&t.TrackURL, &t.AddedBy, &t.AddedAt, &t.AddedByName, &t.AddedByAvatar,
 			&t.DetectedBPM, &t.KeyCamelot, &t.KeyName); err != nil {
 			return nil, err
@@ -323,11 +333,15 @@ func (s *Store) AddTracks(ctx context.Context, playlistID int64, addedBy *int64,
 		next = int(maxPos.Int64) + 1
 	}
 
+	// Both identities go in: the neutral source columns, which every source
+	// fills, and the bc_* ones, which stay populated for Bandcamp rows so
+	// clients still reading them keep working.
 	stmt, err := tx.PrepareContext(ctx,
 		`INSERT INTO playlist_tracks
-		   (playlist_id, position, bc_track_id, bc_album_id, bc_band_id, title, artist,
-		    album_title, duration, art_id, track_url, added_by, added_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+		   (playlist_id, position, source, source_id, source_ref,
+		    bc_track_id, bc_album_id, bc_band_id, title, artist,
+		    album_title, duration, art_id, art_url, track_url, added_by, added_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return 0, err
 	}
@@ -336,9 +350,11 @@ func (s *Store) AddTracks(ctx context.Context, playlistID int64, addedBy *int64,
 	now := time.Now().UTC()
 	added := 0
 	for _, t := range tracks {
-		if _, err := stmt.ExecContext(ctx, playlistID, next, t.TrackID, t.AlbumID, t.BandID,
+		if _, err := stmt.ExecContext(ctx, playlistID, next,
+			trunc(t.Source, 16), trunc(t.SourceID, 64), nullable(trunc(t.SourceRef, 64)),
+			t.TrackID, t.AlbumID, t.BandID,
 			trunc(t.Title, 300), trunc(t.Artist, 300), trunc(t.AlbumTitle, 300), t.Duration,
-			t.ArtID, trunc(t.TrackURL, 500), addedBy, now); err != nil {
+			t.ArtID, nullable(trunc(t.ArtURL, 500)), trunc(t.TrackURL, 500), addedBy, now); err != nil {
 			return 0, err
 		}
 		next++

@@ -234,6 +234,67 @@ CREATE TABLE IF NOT EXISTS api_tokens (
   KEY idx_api_tokens_user (user_id),
   CONSTRAINT fk_api_tokens_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`},
+
+	// A playlist row stops being a Bandcamp row and becomes a row from some
+	// source. source names the integration, source_id is that integration's own
+	// identifier for the track and source_ref whatever else it needs to act on
+	// it later (Bandcamp's band id).
+	//
+	// source_id is text because the sources disagree about what an id is:
+	// Bandcamp's are 64-bit integers, YouTube's are 11 characters of base64url.
+	// art_url is for sources that hand out an image URL rather than an id; it
+	// sits beside art_id rather than replacing it because an id is better where
+	// one exists, the client derives a Bandcamp cover at whatever pixel size a
+	// given view needs, where a stored URL forces one size on every view.
+	{"015_track_source", `
+ALTER TABLE playlist_tracks
+  ADD COLUMN source     VARCHAR(16)  NOT NULL DEFAULT 'bandcamp' AFTER position,
+  ADD COLUMN source_id  VARCHAR(64)  NOT NULL DEFAULT ''         AFTER source,
+  ADD COLUMN source_ref VARCHAR(64)  NULL                        AFTER source_id,
+  ADD COLUMN art_url    VARCHAR(500) NULL                        AFTER art_id`},
+
+	// Every row that exists today is a Bandcamp row, which the DEFAULT above
+	// already recorded; this copies its identifiers into the new columns. The
+	// source_id = '' guard makes it idempotent.
+	{"016_backfill_track_source", `
+UPDATE playlist_tracks
+   SET source_id  = CAST(bc_track_id AS CHAR),
+       source_ref = CAST(bc_band_id AS CHAR)
+ WHERE source_id = ''`},
+
+	// bc_track_id has to give up NOT NULL: a YouTube row has no Bandcamp track
+	// id, and writing 0 would be a lie a later migration could not tell apart
+	// from real data. The index replaces the one the analysis join used to get
+	// from bc_track_id.
+	{"017_track_source_key", `
+ALTER TABLE playlist_tracks
+  MODIFY bc_track_id BIGINT UNSIGNED NULL,
+  ADD KEY idx_tracks_source (source, source_id)`},
+
+	// The analysis cache is keyed on the track's identity, which is no longer a
+	// Bandcamp id. Same reasoning as the playlist rows: the audio behind one
+	// track is identical wherever it appears, so one analysis still serves every
+	// playlist and every user, but "one track" now has to be said in a way that
+	// works for any source.
+	{"018_analysis_source", `
+ALTER TABLE track_analysis
+  ADD COLUMN source    VARCHAR(16) NOT NULL DEFAULT 'bandcamp' FIRST,
+  ADD COLUMN source_id VARCHAR(64) NOT NULL DEFAULT ''         AFTER source`},
+
+	// Every cached row was analysed from Bandcamp audio, which the DEFAULT
+	// above already recorded. Idempotent on the source_id = '' guard.
+	{"019_backfill_analysis_source", `
+UPDATE track_analysis SET source_id = CAST(bc_track_id AS CHAR) WHERE source_id = ''`},
+
+	// Swapping the primary key is safe only because the backfill above is 1:1:
+	// bc_track_id was already unique, and rendering distinct integers as text
+	// cannot collide. bc_track_id goes at the same time, since nothing reads it
+	// once the key has moved.
+	{"020_analysis_source_pk", `
+ALTER TABLE track_analysis
+  DROP PRIMARY KEY,
+  ADD PRIMARY KEY (source, source_id),
+  DROP COLUMN bc_track_id`},
 }
 
 func (s *Store) migrate(ctx context.Context) error {

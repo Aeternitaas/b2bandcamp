@@ -32,9 +32,16 @@ type Config struct {
 	// proxy every request arrives from the proxy, so without this the rate
 	// limiters treat all users as one caller.
 	TrustedProxies []*net.IPNet
+
+	// YouTube Data API v3 key. Optional, and deliberately not required: without
+	// one the YouTube integration still adds tracks by link, through the keyless
+	// oEmbed endpoint, it just cannot determine a video's duration. Setting a key
+	// turns durations, embeddable checks and playlist expansion on.
+	YouTubeAPIKey string
 }
 
 func Load() (*Config, error) {
+	// Load web server environment variables.
 	c := &Config{
 		Port:          env("PORT", "9185"),
 		WebDir:        env("WEB_DIR", "./web"),
@@ -44,9 +51,11 @@ func Load() (*Config, error) {
 		AllowRegister: envBool("ALLOW_REGISTRATION", true),
 	}
 
+	// Load Session TTL environment variable and convert to days.
 	days := envInt("SESSION_TTL_DAYS", 30)
 	c.SessionTTL = time.Duration(days) * 24 * time.Hour
 
+	// Load Public Base URL settings environment variable.
 	if base := strings.TrimRight(os.Getenv("PUBLIC_BASE_URL"), "/"); base != "" {
 		u, err := url.Parse(base)
 		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
@@ -55,12 +64,16 @@ func Load() (*Config, error) {
 		c.PublicBaseURL = base
 	}
 
+	c.YouTubeAPIKey = strings.TrimSpace(os.Getenv("YOUTUBE_API_KEY"))
+
+	// Load Trusted Proxies environemnt variable.
 	proxies, err := parseTrustedProxies(os.Getenv("TRUSTED_PROXIES"))
 	if err != nil {
 		return nil, err
 	}
 	c.TrustedProxies = proxies
 
+	// Load MYSQL environment variables.
 	if dsn := os.Getenv("MYSQL_DSN"); dsn != "" {
 		c.DSN = dsn
 	} else {
