@@ -290,7 +290,46 @@ var (
 		regexp.MustCompile(`"bandId":(\d+)`),
 		regexp.MustCompile(`[?&]band_id=(\d+)`),
 	}
+	metaTitleRe = regexp.MustCompile(`<meta name="title" content="([^"]*)"`)
 )
+
+// pageArtist reads the "<title>, by <artist>" meta tag off a release's own
+// page, the one field Bandcamp gets right everywhere, used as a fallback
+// where the API's own artist fields cannot be trusted (see Details above).
+// Returns "" (no error) rather than failing Details entirely when the page
+// doesn't have that tag in the expected shape.
+func (c *Client) pageArtist(ctx context.Context, pageURL, title string) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, pageURL, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("User-Agent", userAgent)
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer drainAndClose(resp)
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("bandcamp: page returned %d", resp.StatusCode)
+	}
+
+	// The tag sits in <head>, no need to read the whole page.
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
+	if err != nil {
+		return "", err
+	}
+	m := metaTitleRe.FindSubmatch(body)
+	if m == nil {
+		return "", nil
+	}
+	content := html.UnescapeString(string(m[1]))
+	rest, ok := strings.CutPrefix(content, title+", by ")
+	if !ok {
+		return "", nil
+	}
+	return rest, nil
+}
 
 // Resolve turns any Bandcamp album or track URL into the ids the details API
 // needs. Bandcamp no longer inlines track data in the page, so we read only the
@@ -432,6 +471,19 @@ func (c *Client) Details(ctx context.Context, itemType string, itemID, bandID in
 		artist = raw.Band.Name
 	}
 
+	// For a standalone track hosted directly under a label's own account,
+	// this endpoint is unreliable about who actually performs it: both
+	// tralbum_artist and the track's own band_name can come back as the
+	// label's name instead. The track's own page always gets this right (it's
+	// what a listener actually sees there), so confirm against it here rather
+	// than risk filing every such track under its label. Album lookups don't
+	// need this, both fields check out there even for multi-artist releases.
+	if itemType == "t" {
+		if pageArtist, err := c.pageArtist(ctx, raw.BandcampURL, raw.Title); err == nil && pageArtist != "" {
+			artist = pageArtist
+		}
+	}
+
 	t := &Tralbum{
 		ID: raw.ID, Type: raw.Type, Title: raw.Title, Artist: artist,
 		BandID: raw.Band.BandID, ArtID: raw.ArtID, URL: raw.BandcampURL,
@@ -458,7 +510,11 @@ func (c *Client) Details(ctx context.Context, itemType string, itemID, bandID in
 			Duration: rt.Duration, AlbumID: rt.AlbumID, BandID: rt.BandID,
 			ArtID: rt.ArtID, TrackURL: rt.TrackURL, Streamable: rt.IsStreamable,
 		}
-		if tr.Artist = rt.BandName; tr.Artist == "" {
+		if itemType == "t" {
+			// The one track here is the same one just confirmed above,
+			// band_name carries the same label-name bug on this endpoint.
+			tr.Artist = artist
+		} else if tr.Artist = rt.BandName; tr.Artist == "" {
 			tr.Artist = artist
 		}
 		if tr.AlbumTitle = rt.AlbumTitle; tr.AlbumTitle == "" && itemType == "a" {

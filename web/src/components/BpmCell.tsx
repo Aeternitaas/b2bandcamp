@@ -55,6 +55,9 @@ export function BpmCell({ bpm, overridden, editable, onSave }: Props) {
           onChange={(e) => setDraft(e.target.value)}
           onBlur={commit}
           onKeyDown={(e) => {
+            // Stops the row's own Enter/Space "play this track" handler from
+            // also firing while a keystroke here is only meant for the field.
+            e.stopPropagation()
             if (e.key === 'Enter') void commit()
             if (e.key === 'Escape') setEditing(false)
           }}

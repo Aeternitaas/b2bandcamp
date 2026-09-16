@@ -441,6 +441,23 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     }
   }, [playing])
 
+  // Space toggles playback from anywhere on the page, the same shortcut every
+  // media site uses. Skipped whenever it would otherwise land on a form field
+  // or a real button/link, those already do their own thing with Space (type
+  // a space, or activate the control on keyup), and stealing that would
+  // conflict with typing a literal space into a bpm/key/note field.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== ' ') return
+      const target = e.target as HTMLElement | null
+      if (target?.closest('input, textarea, select, button, a[href], [role="button"], [contenteditable="true"]')) return
+      e.preventDefault() // stop the page from scrolling on a bare Space
+      toggle()
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [toggle])
+
   const value = useMemo(
     () => ({
       queue, index, current, playing, position, duration, error,

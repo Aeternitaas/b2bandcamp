@@ -881,7 +881,10 @@ export function PlaylistView({
       {showSettings && (
         <PlaylistSettings
           playlist={playlist}
-          tracks={tracks}
+          // The export tab reads the list the user is actually looking at:
+          // filtered down to unhidden contributors and in the sorted order,
+          // not the playlist's stored order.
+          tracks={visibleTracks}
           isOwner={isOwner}
           onClose={() => setShowSettings(false)}
           onSaved={onPlaylistChange}

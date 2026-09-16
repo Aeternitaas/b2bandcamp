@@ -23,6 +23,7 @@ func main() {
 	log.SetFlags(log.LstdFlags | log.Lmsgprefix)
 	log.SetPrefix("[b2bandcamp] ")
 
+	// Load configuration
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatalf("config: %v", err)
@@ -31,6 +32,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	// Open the SQL Database
 	st, err := store.Open(ctx, cfg.DSN)
 	if err != nil {
 		log.Fatalf("database: %v", err)
@@ -40,12 +42,15 @@ func main() {
 
 	go purgeSessions(ctx, st)
 
+	// Create an instance of the apiHandler which serves the bandcamp portion of the application
 	apiHandler := api.NewServer(cfg, st, bandcamp.New()).Routes()
 
+	// Allocate and set the new, empty HTTP request multiplexer/router.
 	mux := http.NewServeMux()
 	mux.Handle("/api/", apiHandler)
 	mux.Handle("/", spaHandler(cfg.WebDir))
 
+	// Then, create and serve HTTP API server. 
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,
 		Handler:           mux,

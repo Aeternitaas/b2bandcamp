@@ -8,6 +8,9 @@ import { Icon } from './Icon'
 
 interface Props {
   playlist: Playlist
+  /** Whatever the playlist view currently has on screen, already filtered to
+   *  unhidden contributors and in the sorted order, so the export matches
+   *  what the user is looking at rather than the playlist's stored order. */
   tracks: Track[]
   isOwner: boolean
   onClose: () => void
@@ -221,7 +224,7 @@ export function PlaylistSettings({ playlist, tracks, isOwner, onClose, onSaved, 
         </div>
 
         <hr style={{ border: 0, borderTop: '1px solid var(--border)', margin: '4px 0' }} />
-        <h3>Export tracklist</h3>
+        <h3>Export Playlist</h3>
         <div className="row wrap" style={{ gap: 12 }}>
           {EXPORT_FIELDS.map((f) => (
             <label key={f.key} className="row" style={{ gap: 4 }}>
