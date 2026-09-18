@@ -540,6 +540,38 @@ button.icon { min-height: 36px; padding: 6px 8px; }
 .tabs button { flex: 0 0 auto; min-height: 34px; padding: 5px 12px; font-size: 12.5px; }
 .tabs button[aria-selected='true'] { border-color: var(--accent); color: var(--accent); }
 
+/* Which source is being searched or browsed. It sits above a panel's own
+   tabs and changes what those tabs are, so it reads as a wider choice: the
+   two share the whole width rather than sitting at their label's width, and
+   each carries its own mark. */
+.source-tabs { gap: 0; margin-bottom: 4px; overflow-x: visible; }
+.source-tabs button {
+  flex: 1 1 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 38px;
+  border-radius: 0;
+}
+.source-tabs button:first-child {
+  border-top-left-radius: var(--radius);
+  border-bottom-left-radius: var(--radius);
+}
+.source-tabs button:last-child {
+  border-top-right-radius: var(--radius);
+  border-bottom-right-radius: var(--radius);
+  /* The two buttons share the border between them rather than stacking two. */
+  margin-left: -1px;
+}
+.source-tabs button[aria-selected='true'] {
+  background: var(--surface-2);
+  /* Keeps the selected one's border above its neighbour's, so the accent
+     outline is unbroken down the shared edge. */
+  position: relative;
+  z-index: 1;
+}
+
 .spin {
   width: 14px;
   height: 14px;
@@ -1449,6 +1481,24 @@ input[type='checkbox'] { width: auto; height: auto; }
 .p-art { padding: 0; min-height: 0; border: 0; background: none; flex: 0 0 auto; }
 .p-art:hover:not(:disabled) { background: none; }
 
+/* The YouTube player takes the artwork's height at 16:9. The size is fixed and
+   the iframe fills it, so a video cannot change the height of the bar. */
+.p-yt {
+  position: relative;
+  width: 78px;
+  height: 44px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #000;
+}
+.p-yt > *,
+.p-yt iframe {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
 .p-meta { flex: 1 1 150px; min-width: 0; max-width: 260px; }
 
 .p-transport { display: flex; align-items: center; gap: 2px; flex: 0 0 auto; }
@@ -1488,6 +1538,11 @@ input[type='checkbox'] { width: auto; height: auto; }
 
   .player-inner { gap: 8px; padding: 0 8px; }
   .player-art { width: 40px; height: 40px; }
+  /* A phone has no width to spare, so the slot keeps the artwork's square.
+     The iframe keeps 16:9 and the slot shows its centre. */
+  .p-yt { width: 40px; height: 40px; }
+  .p-yt > *,
+  .p-yt iframe { width: 71px; margin-left: -15.5px; }
   .p-meta { flex: 1 1 auto; max-width: none; }
   .p-wave { flex: 1 1 90px; min-width: 70px; }
 

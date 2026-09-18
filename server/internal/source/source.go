@@ -128,10 +128,6 @@ type Provider interface {
 
 // Streamer is implemented by providers whose audio this server may hand to a
 // browser. Bandcamp resolves a signed, short-lived CDN url per play.
-//
-// It is separate from Provider so that a source which must use its own player,
-// as YouTube's terms require, simply does not implement it, rather than being
-// forced to write a method that always fails.
 type Streamer interface {
 	StreamURL(ctx context.Context, ref Ref) (string, error)
 }

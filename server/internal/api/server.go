@@ -12,6 +12,7 @@ import (
 	"github.com/aeternitaas/b2bandcamp/server/internal/config"
 	"github.com/aeternitaas/b2bandcamp/server/internal/source"
 	"github.com/aeternitaas/b2bandcamp/server/internal/store"
+	"github.com/aeternitaas/b2bandcamp/server/internal/youtube"
 )
 
 type Server struct {
@@ -21,7 +22,11 @@ type Server struct {
 	// lookup, the audio relay. Those are what being the first-class source
 	// means, and routing them through the neutral contract would produce an
 	// interface with exactly one implementation.
-	bc      *bandcamp.Client
+	bc *bandcamp.Client
+	// yt backs the YouTube-only endpoints, for the same reason bc does: catalog
+	// search, browsing an account, and getting at the audio are things one
+	// source does, not things every source must.
+	yt      *youtube.Provider
 	sources *source.Registry
 	hub     *playlistHub
 	// csp is assembled from the registered sources once, at startup, so the
@@ -29,9 +34,9 @@ type Server struct {
 	csp string
 }
 
-func NewServer(cfg *config.Config, st *store.Store, bc *bandcamp.Client, sources *source.Registry) *Server {
+func NewServer(cfg *config.Config, st *store.Store, bc *bandcamp.Client, yt *youtube.Provider, sources *source.Registry) *Server {
 	return &Server{
-		cfg: cfg, st: st, bc: bc, sources: sources,
+		cfg: cfg, st: st, bc: bc, yt: yt, sources: sources,
 		hub: newPlaylistHub(),
 		csp: buildCSP(sources.MergedCSP()),
 	}
@@ -93,6 +98,15 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/bc/wishlist", s.handleBCWishlist)
 	mux.HandleFunc("GET /api/bc/stream/{trackId}", s.handleBCStream)
 	mux.HandleFunc("GET /api/bc/audio/{trackId}", s.handleBCAudio)
+
+	// youtube
+	mux.HandleFunc("GET /api/yt/search", s.handleYTSearch)
+	mux.HandleFunc("GET /api/yt/lookup", s.handleYTLookup)
+	mux.HandleFunc("GET /api/yt/channel", s.handleYTChannel)
+	mux.HandleFunc("GET /api/yt/playlists", s.handleYTPlaylists)
+	mux.HandleFunc("GET /api/yt/playlist", s.handleYTPlaylist)
+	mux.HandleFunc("GET /api/yt/stream/{videoId}", s.handleYTStream)
+	mux.HandleFunc("GET /api/yt/audio/{videoId}", s.handleYTAudio)
 
 	// cached audio analysis. The {trackId} pair are the original routes, from
 	// when Bandcamp was the only source; they still resolve, as that source.

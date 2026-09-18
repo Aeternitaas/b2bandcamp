@@ -33,6 +33,12 @@ type Config struct {
 	// limiters treat all users as one caller.
 	TrustedProxies []*net.IPNet
 
+	// Path to the yt-dlp binary, or empty to look for it on PATH. Optional in
+	// both senses: with no extractor installed the YouTube integration still
+	// adds videos by link, it just cannot play or analyse them. See
+	// internal/youtube/audio.go.
+	YTDLPPath string
+
 	// YouTube Data API v3 key. Optional, and deliberately not required: without
 	// one the YouTube integration still adds tracks by link, through the keyless
 	// oEmbed endpoint, it just cannot determine a video's duration. Setting a key
@@ -65,6 +71,7 @@ func Load() (*Config, error) {
 	}
 
 	c.YouTubeAPIKey = strings.TrimSpace(os.Getenv("YOUTUBE_API_KEY"))
+	c.YTDLPPath = strings.TrimSpace(os.Getenv("YTDLP_PATH"))
 
 	// Load Trusted Proxies environemnt variable.
 	proxies, err := parseTrustedProxies(os.Getenv("TRUSTED_PROXIES"))

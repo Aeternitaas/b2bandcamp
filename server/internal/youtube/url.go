@@ -119,3 +119,76 @@ func isBase64URL(s string) bool {
 func watchURL(videoID string) string {
 	return "https://www.youtube.com/watch?v=" + videoID
 }
+
+// playlistURL is the canonical page for a playlist.
+func playlistURL(playlistID string) string {
+	return "https://www.youtube.com/playlist?list=" + playlistID
+}
+
+// channelURL is the canonical page for a channel.
+func channelURL(channelID string) string {
+	return "https://www.youtube.com/channel/" + channelID
+}
+
+// uploadsPlaylistID is the playlist holding everything a channel has posted.
+// YouTube derives it from the channel id by swapping the leading "UC" for "UU",
+// and has done so for every channel since ids were introduced, which is why
+// this needs no API call.
+func uploadsPlaylistID(channelID string) string {
+	if !strings.HasPrefix(channelID, "UC") {
+		return ""
+	}
+	return "UU" + strings.TrimPrefix(channelID, "UC")
+}
+
+// validChannelID accepts the "UC" + 22 characters form every current channel
+// id takes, so a stray path segment cannot be pushed into an API call.
+func validChannelID(s string) bool {
+	return len(s) == 24 && strings.HasPrefix(s, "UC") && isBase64URL(s)
+}
+
+// parseChannelURL recognises the four shapes a channel link takes and reports
+// which channels.list selector matches it. The handle and legacy forms cannot
+// be turned into an id without asking YouTube, so they are returned as the
+// selector that will do the asking.
+//
+// Recognised: /channel/UC..., /@handle, /c/Name, /user/Name.
+func parseChannelURL(raw string) (param, value string, ok bool) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", "", false
+	}
+	if !strings.HasPrefix(raw, "http://") && !strings.HasPrefix(raw, "https://") {
+		// A bare "@handle" is not a URL and is handled by the caller; anything
+		// else without a scheme is only a link if it names a YouTube host.
+		if !strings.Contains(raw, "youtube.com/") {
+			return "", "", false
+		}
+		raw = "https://" + raw
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return "", "", false
+	}
+
+	host := strings.TrimPrefix(strings.ToLower(u.Hostname()), "www.")
+	switch host {
+	case "youtube.com", "m.youtube.com", "music.youtube.com":
+	default:
+		return "", "", false
+	}
+
+	first, second := splitPath(u.Path)
+	switch {
+	case first == "channel" && validChannelID(second):
+		return "id", second, true
+	case strings.HasPrefix(first, "@") && len(first) > 1:
+		return "forHandle", first, true
+	case (first == "c" || first == "user") && second != "":
+		// Both of these are display names rather than ids. forUsername only
+		// resolves the older /user/ form, and it is the only selector that can
+		// resolve any of it, so it is worth one try before the search fallback.
+		return "forUsername", second, true
+	}
+	return "", "", false
+}

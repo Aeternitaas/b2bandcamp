@@ -2,15 +2,16 @@ import { useEffect, useState } from 'react'
 import { api } from '../api'
 import { Icon } from './Icon'
 import { formatDuration } from '../utils'
+import { bcSource } from '../audio/usePreview'
 import type { usePreview } from '../audio/usePreview'
-import type { Tralbum, TrackRef, WishlistItem } from '../types'
+import type { AddPayload, Tralbum, WishlistItem } from '../types'
 
 interface Props {
   item: WishlistItem
   canEdit: boolean
   preview: ReturnType<typeof usePreview>
   onTrackPreviewed: (trackId: number) => void
-  onAdd: (refs: TrackRef[]) => Promise<void>
+  onAdd: (payload: AddPayload) => Promise<void>
 }
 
 /**
@@ -41,7 +42,7 @@ export function WishlistAlbumTracks({ item, canEdit, preview, onTrackPreviewed, 
   const addOne = async (trackId: number, bandId: number) => {
     setAdding(trackId)
     try {
-      await onAdd([{ type: 't', id: trackId, band_id: bandId || item.band_id }])
+      await onAdd({ items: [{ type: 't', id: trackId, band_id: bandId || item.band_id }] })
       setAdded((prev) => new Set(prev).add(trackId))
     } catch (e) {
       setError((e as Error).message)
@@ -70,21 +71,20 @@ export function WishlistAlbumTracks({ item, canEdit, preview, onTrackPreviewed, 
       <div className="popover-tracks">
         {detail.tracks.map((t) => {
         const isAdded = added.has(t.track_id)
-        const isPlaying = preview.isPreviewing(t.track_id)
+        const isPlaying = preview.isPreviewing('bandcamp', String(t.track_id))
         return (
           <div className={`popover-track${isPlaying ? ' playing' : ''}`} key={t.track_id}>
             <button
               className="popover-art"
               onClick={() => {
                 preview.press({
-                  trackId: t.track_id,
-                  bandId: t.band_id || item.band_id,
+                  ...bcSource(t.track_id, t.band_id || item.band_id),
                   title: t.title,
                   artist: t.artist,
-                  albumTitle: detail.title,
-                  artId: t.art_id,
+                  album_title: detail.title,
+                  art_id: t.art_id,
                   duration: t.duration,
-                  trackUrl: t.track_url,
+                  track_url: t.track_url,
                 })
                 onTrackPreviewed(t.track_id)
               }}

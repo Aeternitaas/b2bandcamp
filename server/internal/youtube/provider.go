@@ -1,12 +1,18 @@
-// Package youtube adds YouTube links as playlist tracks.
+// Package youtube adds YouTube videos and playlists as playlist tracks.
 //
-// It is a second-class source by design, and by necessity. YouTube's terms
-// require playback through its own player, so this server never resolves or
-// relays audio: it stores what a row needs to be displayed and identified, and
-// the client mounts YouTube's iframe player on the video id. Because the audio
-// samples never reach the browser same-origin, tempo, key and waveform
-// detection cannot run on these tracks either. Manual bpm, key and note edits
-// work exactly as they do for any other row.
+// How much it can do depends on how the instance is set up, and the provider
+// reports that through Caps rather than the client guessing:
+//
+//   - With no configuration it adds videos by link, through the keyless oEmbed
+//     endpoint, with no duration.
+//   - With YOUTUBE_API_KEY it reports durations, expands playlist links, and
+//     answers catalog search and channel browsing.
+//   - With an audio extractor installed (see audio.go) it also streams, which
+//     in turn makes tempo, key and waveform detection work, because those need
+//     the same samples.
+//
+// Manual bpm, key and note edits work in every one of those cases: those
+// columns were never tied to a source.
 package youtube
 
 import (
@@ -36,8 +42,8 @@ const (
 	maxPlaylistItems = 200
 )
 
-// Provider implements source.Provider. It deliberately does not implement
-// source.Streamer: see the package comment.
+// Provider implements source.Provider, and source.Streamer when an audio
+// extractor is installed. See audio.go for why that one is conditional.
 type Provider struct {
 	apiKey string
 	http   *http.Client
@@ -45,19 +51,38 @@ type Provider struct {
 	// tests can point it at a stub and exercise the keyed path, which is
 	// otherwise reachable only with real API credentials.
 	base string
+
+	// ytdlp is the resolved path to the audio extractor, empty when none is
+	// installed. Resolved once at construction: see findExtractor.
+	ytdlp string
+
+	// streams holds resolved audio urls, which expire, and results holds
+	// answers to catalog calls, which cost quota.
+	streams *ttlCache[string]
+	results *ttlCache[[]Result]
 }
 
-var _ source.Provider = (*Provider)(nil)
+var (
+	_ source.Provider = (*Provider)(nil)
+	_ source.Streamer = (*Provider)(nil)
+)
 
 // New builds the provider. An empty key is valid and selects the keyless oEmbed
 // path, which cannot report durations; that is a deliberate trade so a
 // self-hosted instance works without anyone registering for API access.
-func New(apiKey string) *Provider {
-	return &Provider{
-		apiKey: strings.TrimSpace(apiKey),
-		http:   &http.Client{Timeout: 15 * time.Second},
-		base:   apiBase,
+func New(apiKey string, opts ...Option) *Provider {
+	p := &Provider{
+		apiKey:  strings.TrimSpace(apiKey),
+		http:    &http.Client{Timeout: 15 * time.Second},
+		base:    apiBase,
+		streams: newTTLCache[string](),
+		results: newTTLCache[[]Result](),
 	}
+	for _, opt := range opts {
+		opt(p)
+	}
+	p.ytdlp = findExtractor(p.ytdlp)
+	return p
 }
 
 // HasAPIKey reports whether the richer Data API path is in use. Callers use it
@@ -110,21 +135,38 @@ func (p *Provider) Expand(ctx context.Context, ref source.Ref) ([]source.Track, 
 	return nil, fmt.Errorf("%w: youtube kind %q", source.ErrUnsupported, ref.Kind)
 }
 
+// Caps is answered from what this build can actually do rather than from a
+// constant, because two of the four depend on how the instance is set up: an
+// extractor makes audio reachable, and a key makes the catalog reachable.
 func (p *Provider) Caps() source.Caps {
+	stream := p.CanStream()
 	return source.Caps{
-		Stream:  false, // playback is YouTube's player, never this server
-		Analyze: false, // the samples never reach the browser same-origin
-		Search:  false, // search.list costs 100 quota units per call
-		Embed:   true,
+		Stream: stream,
+		// The same relay that feeds the audio element feeds an AnalyserNode,
+		// same-origin, so these two are one question and not two.
+		Analyze: stream,
+		// search.list costs 100 of the 10,000 daily quota units, which is why
+		// results are cached and why this is off without a key.
+		Search: p.apiKey != "",
+		// Embedding is the fallback for when this server cannot hand over the
+		// audio itself. With an extractor the row plays like any other.
+		Embed: !stream,
 	}
 }
 
+// CSP asks for the embedded player's origins only when the embedded player is
+// what plays these rows. When the audio comes through this server's own relay
+// the policy needs nothing: media-src already carries 'self', and thumbnails
+// are covered by the blanket https: img-src. An origin nothing loads from is
+// still an origin the policy permits, so it is not left in.
 func (p *Provider) CSP() source.CSP {
+	if p.CanStream() {
+		return source.CSP{}
+	}
 	return source.CSP{
 		// The nocookie host is the same player without the tracking cookies.
 		Frame:  []string{"https://www.youtube-nocookie.com"},
 		Script: []string{"https://www.youtube.com"},
-		// Thumbnails are covered by the policy's blanket https: img-src.
 	}
 }
 
@@ -187,17 +229,19 @@ func (p *Provider) viaDataAPI(ctx context.Context, ids []string) ([]source.Track
 		}
 
 		for _, it := range out.Items {
+			artist, title := artistAndTitle(it.Snippet.Title, it.Snippet.ChannelTitle)
 			found[it.ID] = source.Track{
 				SourceID: it.ID,
-				Title:    it.Snippet.Title,
-				Artist:   it.Snippet.ChannelTitle,
+				Title:    title,
+				Artist:   artist,
 				Duration: parseISODuration(it.ContentDetails.Duration),
 				ArtURL:   bestThumbnail(it.Snippet.Thumbnails),
 				PageURL:  watchURL(it.ID),
-				// A video the uploader blocked from embedding could never be
-				// played here, so it is skipped the same way a Bandcamp track
-				// with no preview stream is.
-				Playable: it.Status.Embeddable,
+				// Embedding only matters when the embedded player is what
+				// plays these rows. With an extractor installed the audio comes
+				// from this server, and an uploader's embedding setting has
+				// nothing to say about that.
+				Playable: it.Status.Embeddable || p.CanStream(),
 			}
 		}
 	}
@@ -235,10 +279,11 @@ func (p *Provider) viaOEmbed(ctx context.Context, ids []string) ([]source.Track,
 			// One unavailable video in a batch should not sink the whole add.
 			continue
 		}
+		artist, title := artistAndTitle(r.Title, r.AuthorName)
 		out = append(out, source.Track{
 			SourceID: id,
-			Title:    r.Title,
-			Artist:   r.AuthorName,
+			Title:    title,
+			Artist:   artist,
 			ArtURL:   r.ThumbnailURL,
 			PageURL:  watchURL(id),
 			// oEmbed answering at all means the video exists and is embeddable;

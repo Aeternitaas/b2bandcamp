@@ -1,10 +1,11 @@
 import type {
-  AccountSummary, ApiToken, Collaborator, Fan, Playlist, SearchResult, Track, TrackRef,
-  ShareLink, Tralbum, User, Visibility, WishlistPage,
+  AccountSummary, ApiToken, Collaborator, Fan, Playlist, SearchResult, SourceId, SourceInfo,
+  Track, TrackRef, ShareLink, Tralbum, User, Visibility, WishlistPage, YTChannel, YTResult,
 } from './types'
 
 export interface CachedAnalysis {
-  bc_track_id: number
+  source: string
+  source_id: string
   analyzer_version: number
   bpm: number | null
   bpm_confidence: number | null
@@ -199,6 +200,12 @@ export const api = {
   removeCollaborator: (playlistId: number, userId: number) =>
     request<{ ok: boolean }>(`/api/playlists/${playlistId}/collaborators/${userId}`, { method: 'DELETE' }),
 
+  // ---- integrations ----
+
+  /** What this build's sources can do. Describes the server, not the user, so
+   *  it needs no sign-in and is fetched once; see sources.ts. */
+  sources: () => request<{ sources: SourceInfo[] }>('/api/sources'),
+
   // ---- bandcamp ----
   search: (q: string, type = '') =>
     request<{ results: SearchResult[] }>(
@@ -217,27 +224,77 @@ export const api = {
     request<WishlistPage>(
       `/api/bc/wishlist?fan_id=${fanId}&token=${encodeURIComponent(token)}&count=${count}`),
 
-  /** Cached analysis for a Bandcamp track, or null when not yet analysed. */
-  getAnalysis: async (trackId: number) => {
+  // ---- youtube ----
+
+  ytSearch: (q: string, kind = '') =>
+    request<{ results: YTResult[] }>(
+      `/api/yt/search?q=${encodeURIComponent(q)}&kind=${encodeURIComponent(kind)}`),
+
+  /** Describes the video or playlist behind a pasted link. Adds nothing. */
+  ytLookup: (url: string) =>
+    request<{ result: YTResult }>(`/api/yt/lookup?url=${encodeURIComponent(url)}`),
+
+  /** Resolves a handle, a channel link or a display name to one channel. */
+  ytChannel: (q: string) =>
+    request<YTChannel>(`/api/yt/channel?q=${encodeURIComponent(q)}`),
+
+  /** One page of a channel's public playlists. */
+  ytPlaylists: (channelId: string, pageToken = '') =>
+    request<{ results: YTResult[]; next_page_token: string }>(
+      `/api/yt/playlists?channel_id=${encodeURIComponent(channelId)}&page_token=${encodeURIComponent(pageToken)}`),
+
+  /** One page of the videos inside a playlist. */
+  ytPlaylistTracks: (playlistId: string, pageToken = '') =>
+    request<{ results: YTResult[]; next_page_token: string }>(
+      `/api/yt/playlist?id=${encodeURIComponent(playlistId)}&page_token=${encodeURIComponent(pageToken)}`),
+
+  // ---- cached analysis ----
+
+  /**
+   * Cached analysis for one track, or null when nobody has analysed it yet.
+   *
+   * Keyed by source and that source's own id, so one analysis is shared by
+   * every playlist row pointing at the same track, whichever source it is.
+   */
+  getAnalysis: async (source: SourceId, sourceId: string) => {
     try {
-      return await request<CachedAnalysis>(`/api/analysis/${trackId}`)
+      return await request<CachedAnalysis>(analysisPath(source, sourceId))
     } catch (e) {
       if (e instanceof ApiError && e.status === 404) return null
       throw e
     }
   },
 
-  saveAnalysis: (trackId: number, body_: CachedAnalysisInput) =>
-    request<{ ok: boolean }>(`/api/analysis/${trackId}`, { method: 'PUT', body: body(body_) }),
+  saveAnalysis: (source: SourceId, sourceId: string, body_: CachedAnalysisInput) =>
+    request<{ ok: boolean }>(analysisPath(source, sourceId), { method: 'PUT', body: body(body_) }),
 
-  /** Playback URL. The server resolves a freshly signed stream and redirects. */
-  streamUrl: (trackId: number, bandId: number) =>
-    `/api/bc/stream/${trackId}?band_id=${bandId}`,
+  // ---- audio ----
 
   /**
-   * Same audio, relayed same-origin so Web Audio may read the samples.
-   * Only used when the analysis panel is open, see the Go handler for why.
+   * Playback URL for one row, by source.
+   *
+   * Bandcamp redirects to a freshly signed CDN URL, so the bytes never pass
+   * through this server. YouTube has to be relayed instead; see the Go handler
+   * for why. Both are same-origin as far as the audio element is concerned.
    */
-  audioUrl: (trackId: number, bandId: number) =>
-    `/api/bc/audio/${trackId}?band_id=${bandId}`,
+  streamUrl: (track: Pick<Track, 'source' | 'source_id' | 'source_ref'>) =>
+    (track.source === 'youtube'
+      ? `/api/yt/stream/${encodeURIComponent(track.source_id)}`
+      : `/api/bc/stream/${track.source_id}?band_id=${track.source_ref}`),
+
+  /**
+   * The same audio, delivered whole and same-origin so Web Audio may read the
+   * samples. Only used while analysing, which is why both sources treat it as
+   * the expensive path: Bandcamp relays the bytes, and YouTube downloads the
+   * file, serves it and deletes it.
+   */
+  audioUrl: (track: Pick<Track, 'source' | 'source_id' | 'source_ref'>) =>
+    (track.source === 'youtube'
+      ? `/api/yt/audio/${encodeURIComponent(track.source_id)}`
+      : `/api/bc/audio/${track.source_id}?band_id=${track.source_ref}`),
+}
+
+/** The analysis cache is addressed by source and id. */
+function analysisPath(source: SourceId, sourceId: string): string {
+  return `/api/analysis/${encodeURIComponent(source)}/${encodeURIComponent(sourceId)}`
 }

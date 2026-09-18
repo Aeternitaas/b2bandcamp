@@ -18,8 +18,9 @@ import { EMPTY_WISHLIST_CACHE, WishlistSidebar } from './WishlistSidebar'
 import type { WishlistCache } from './WishlistSidebar'
 import { usePlayer } from '../state/player'
 import { analyzeTrack } from '../audio/analyzeTrack'
-import { formatTotal, looksLikeBandcampUrl, playlistCover } from '../utils'
-import type { Collaborator, Playlist, Track, TrackRef } from '../types'
+import { formatTotal, playlistCover } from '../utils'
+import { capsOf, parseLink, useSourceCaps } from '../sources'
+import type { AddPayload, Collaborator, Playlist, Track } from '../types'
 
 /** The key to show: a hand-entered override wins over what analysis found. */
 export function effectiveKey(track: Track): string {
@@ -84,9 +85,9 @@ export function PlaylistView({
   const { user } = useAuth()
 
   const [showAdd, setShowAdd] = useState(false)
-  // Set when a Bandcamp link is pasted into the page itself rather than into
-  // the add-music field, so opening that popup resolves it immediately
-  // instead of asking for the same link a second time.
+  // Set when a link is pasted into the page itself rather than into the
+  // add-music field, so opening that popup handles it immediately instead of
+  // asking for the same link a second time.
   const [pasteUrl, setPasteUrl] = useState<string | undefined>(undefined)
   const [showSettings, setShowSettings] = useState(false)
   const [showWishlist, setShowWishlist] = useState(false)
@@ -221,15 +222,24 @@ export function PlaylistView({
     })
   }, [])
 
-  // What's already in the playlist, by Bandcamp track id, so the add-track
-  // popup can warn before filing a track in twice.
-  const existingTrackIds = useMemo(
-    () => new Set(tracks.map((t) => t.bc_track_id)),
+  // What's already in the playlist, so the add-track popup can warn before
+  // filing a track in twice. Keyed on source and that source's own id, because
+  // that pair is what identifies a row whatever it came from; the older
+  // Bandcamp-only id is null on every other source's rows.
+  const existingTracks = useMemo(
+    () => new Set(tracks.map((t) => `${t.source}:${t.source_id}`)),
     [tracks],
   )
 
-  const addRefs = useCallback(async (refs: TrackRef[]) => {
-    const res = await api.addTracks(playlist.id, { items: refs })
+  // Tempo and key detection needs the raw audio same-origin, which depends on
+  // the source and on how this server is configured. A row that cannot be
+  // analysed is not offered the action rather than being offered one that
+  // fails.
+  const caps = useSourceCaps()
+  const analyzable = useCallback((t: Track) => capsOf(caps, t.source).analyze, [caps])
+
+  const addTracks = useCallback(async (payload: AddPayload) => {
+    const res = await api.addTracks(playlist.id, payload)
     onTracksChange(res.tracks)
     onPlaylistChange({ ...playlist, track_count: res.tracks.length })
   }, [playlist, onPlaylistChange, onTracksChange])
@@ -246,13 +256,13 @@ export function PlaylistView({
     const url = raw.split('\n').map((l) => l.trim()).find((l) => l && !l.startsWith('#'))
     if (!url) return
 
+    // Handed to the server as a link rather than resolved here first: the
+    // server offers it to each integration in turn, so a YouTube link dropped
+    // on row 12 lands on row 12 the same way a Bandcamp one does.
     const before = new Set(tracks.map((t) => t.id))
     setError('')
     try {
-      const detail = await api.resolveUrl(url)
-      const res = await api.addTracks(playlist.id, {
-        items: [{ type: detail.type, id: detail.id, band_id: detail.band_id }],
-      })
+      const res = await api.addTracks(playlist.id, { url })
       const added = res.tracks.filter((t) => !before.has(t.id))
       const rest = res.tracks.filter((t) => before.has(t.id))
       const reordered = [...rest.slice(0, index), ...added, ...rest.slice(index)]
@@ -266,9 +276,11 @@ export function PlaylistView({
   }, [playlist, tracks, onPlaylistChange, onTracksChange])
 
   /**
-   * A track or album link pasted anywhere on the page (rather than typed into
-   * the add-music field itself) opens that same popup instead of adding
-   * straight away, so an album lands on its track list, not silently in full.
+   * A link pasted anywhere on the page (rather than typed into the add-music
+   * field itself) opens that same popup instead of adding straight away, so an
+   * album lands on its track list, not silently in full. Any link either
+   * integration recognises works: a Bandcamp album or track, a YouTube video or
+   * playlist, in any of the shortened and parameter-laden forms those come in.
    * Ignored while focus is in an editable field, that paste belongs to
    * whatever field it lands in (including add-music's own link field, which
    * resolves it itself).
@@ -286,9 +298,10 @@ export function PlaylistView({
       const target = e.target as HTMLElement | null
       if (target?.closest('input, textarea, [contenteditable="true"]')) return
       const text = e.clipboardData?.getData('text/plain').trim()
-      if (!text || !looksLikeBandcampUrl(text)) return
+      const link = text ? parseLink(text) : null
+      if (!link) return
       e.preventDefault()
-      setPasteUrl(text)
+      setPasteUrl(link.url)
       setShowAdd(true)
     }
     document.addEventListener('paste', onPaste)
@@ -409,7 +422,7 @@ export function PlaylistView({
       try {
         // analyzeTrack publishes to the shared cache; the detection comes back
         // as detected_bpm and never overwrites a manual override.
-        const result = await analyzeTrack(track.bc_track_id, track.bc_band_id!, { force: opts.force })
+        const result = await analyzeTrack(track, { force: opts.force })
         results.set(track.id, {
           bpm: result.tempo.bpm > 0 ? result.tempo.bpm : null,
           camelot: result.key?.camelot ?? '',
@@ -436,12 +449,12 @@ export function PlaylistView({
   }, [onTracksChange])
 
   const analyzeSelected = useCallback(() => (
-    runAnalysis(tracks.filter((t) => selected.has(t.id) && t.bc_band_id))
-  ), [tracks, selected, runAnalysis])
+    runAnalysis(tracks.filter((t) => selected.has(t.id) && analyzable(t)))
+  ), [tracks, selected, analyzable, runAnalysis])
 
   const tracksMissingAnalysis = useMemo(
-    () => tracks.filter((t) => t.bc_band_id && t.detected_bpm == null && !t.key_camelot),
-    [tracks],
+    () => tracks.filter((t) => analyzable(t) && t.detected_bpm == null && !t.key_camelot),
+    [tracks, analyzable],
   )
 
   /** Analyses only tracks with no tempo/key showing yet. */
@@ -450,8 +463,8 @@ export function PlaylistView({
   /** Re-analyses every track, ignoring whatever is already cached or shown,
    *  for when the detector itself has improved and old results are stale. */
   const analyzeAll = useCallback(() => (
-    runAnalysis(tracks.filter((t) => t.bc_band_id), { force: true })
-  ), [tracks, runAnalysis])
+    runAnalysis(tracks.filter(analyzable), { force: true })
+  ), [tracks, analyzable, runAnalysis])
 
   /**
    * Recomputes one track's analysis, ignoring any cached result. Tempo and key
@@ -460,11 +473,11 @@ export function PlaylistView({
    * override in `bpm`.
    */
   const reanalyzeTrack = useCallback(async (track: Track) => {
-    if (!track.bc_band_id) return
+    if (!analyzable(track)) return
     setAnalyzingRows((prev) => new Set(prev).add(track.id))
     setError('')
     try {
-      const result = await analyzeTrack(track.bc_track_id, track.bc_band_id, { force: true })
+      const result = await analyzeTrack(track, { force: true })
       onTracksChange((prev) => prev.map((t) => (t.id === track.id ? {
         ...t,
         detected_bpm: result.tempo.bpm > 0 ? result.tempo.bpm : null,
@@ -778,7 +791,7 @@ export function PlaylistView({
       ) : tracks.length === 0 ? (
         <div className="empty">
           Nothing here yet.
-          {canEdit && ' Add music with a Bandcamp link, a search, or from a wishlist.'}
+          {canEdit && ' Add music with a Bandcamp or YouTube link, a search, or from a wishlist.'}
         </div>
       ) : (
         <>
@@ -842,7 +855,7 @@ export function PlaylistView({
               onSaveBpm={(v) => saveBpm(track, v)}
               onSaveKey={(code) => saveKey(track, code)}
               onSaveNote={(note) => saveNote(track, note)}
-              onReanalyze={track.bc_band_id ? () => reanalyzeTrack(track) : undefined}
+              onReanalyze={analyzable(track) ? () => reanalyzeTrack(track) : undefined}
               analyzing={analyzingRows.has(track.id)}
               contributorMenu={{
                 isolated: filtering && !hidden.has(contributorKey(track))
@@ -872,8 +885,8 @@ export function PlaylistView({
       {showAdd && (
         <AddTracks
           onClose={() => { setShowAdd(false); setPasteUrl(undefined) }}
-          onAdd={addRefs}
-          existingTrackIds={existingTrackIds}
+          onAdd={addTracks}
+          existingTracks={existingTracks}
           initialUrl={pasteUrl}
         />
       )}
@@ -899,7 +912,7 @@ export function PlaylistView({
           cache={wishlistCache}
           onCacheChange={setWishlistCache}
           onClose={() => setShowWishlist(false)}
-          onAdd={addRefs}
+          onAdd={addTracks}
         />
       )}
     </div>

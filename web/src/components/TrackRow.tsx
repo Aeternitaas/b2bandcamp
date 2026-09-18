@@ -5,7 +5,8 @@ import { Icon } from './Icon'
 import { KeyCell } from './KeyCell'
 import { NoteCell } from './NoteCell'
 import { useRowGestures } from '../hooks/useRowGestures'
-import { artUrl, formatAddedAgo, formatDuration } from '../utils'
+import { formatAddedAgo, formatDuration, trackArt } from '../utils'
+import { sourceMeta } from '../sources'
 import type { ColumnConfig } from './TrackColumns'
 import type { HandleProps } from './SortableList'
 import type { Collaborator, Track } from '../types'
@@ -114,8 +115,9 @@ export function TrackRow(props: Props) {
     selected ? 'selected' : '',
   ].filter(Boolean).join(' ')
 
-  const art = track.art_id
-    ? <img className="cover" src={artUrl(track.art_id, 3)} alt="" loading="lazy" />
+  const cover = trackArt(track, 3)
+  const art = cover
+    ? <img className="cover" src={cover} alt="" loading="lazy" />
     : <div className="cover"><Icon name="music" size={16} /></div>
 
   // Re-analysis lives with the row actions rather than inside the tempo editor,
@@ -132,17 +134,21 @@ export function TrackRow(props: Props) {
     </button>
   ) : null
 
+  // The link out carries the source's own mark rather than a generic arrow:
+  // on a mixed playlist it is the fastest way to see where a row came from,
+  // and it says where the link goes before anyone follows it.
+  const source = sourceMeta(track.source)
   const linkOut = track.track_url ? (
     <a
       className="ghost icon track-action"
       href={track.track_url}
       target="_blank"
       rel="noreferrer noopener"
-      aria-label={`Open ${track.title} on Bandcamp`}
-      title="Open on Bandcamp"
+      aria-label={`${source.linkLabel}: ${track.title}`}
+      title={source.linkLabel}
       onClick={stop}
     >
-      <Icon name="external-link" size={14} />
+      <Icon name={source.icon} size={14} />
     </a>
   ) : <span className="track-action" />
 

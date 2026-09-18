@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { api } from '../api'
 import { Icon } from './Icon'
 import { formatDuration } from '../utils'
-import { usePreview } from '../audio/usePreview'
+import { bcSource, usePreview } from '../audio/usePreview'
 import type { Tralbum, TrackRef, WishlistItem } from '../types'
 
 interface Props {
@@ -149,20 +149,19 @@ export function WishlistAlbumMenu({ item, canEdit, added, busy, onAddAlbum, onAd
             <div className="popover-tracks">
               {detail.tracks.map((t) => {
                 const isAdded = addedTracks.has(t.track_id)
-                const isPlaying = preview.isPreviewing(t.track_id)
+                const isPlaying = preview.isPreviewing('bandcamp', String(t.track_id))
                 return (
                   <div className={`popover-track${isPlaying ? ' playing' : ''}`} key={t.track_id}>
                     <button
                       className="popover-art"
                       onClick={() => preview.press({
-                        trackId: t.track_id,
-                        bandId: t.band_id || item.band_id,
+                        ...bcSource(t.track_id, t.band_id || item.band_id),
                         title: t.title,
                         artist: t.artist,
-                        albumTitle: detail.title,
-                        artId: t.art_id,
+                        album_title: detail.title,
+                        art_id: t.art_id,
                         duration: t.duration,
-                        trackUrl: t.track_url,
+                        track_url: t.track_url,
                       })}
                       disabled={!t.streamable}
                       aria-label={`Preview ${t.title}`}

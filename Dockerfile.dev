@@ -5,8 +5,11 @@
 # multi-stage build in Dockerfile.
 FROM golang:1.23-alpine
 
-# git is needed to `go install` air; wget backs the healthcheck.
-RUN apk add --no-cache git ca-certificates wget
+# git is needed to `go install` air; wget backs the healthcheck. yt-dlp lets the
+# server relay YouTube audio, which makes YouTube rows analysable, as in the
+# production image. See the comment there for why it comes from PyPI.
+RUN apk add --no-cache git ca-certificates wget python3 py3-pip \
+    && pip install --no-cache-dir --break-system-packages yt-dlp
 
 # air watches the tree and restarts the binary on change.
 RUN go install github.com/air-verse/air@v1.61.1

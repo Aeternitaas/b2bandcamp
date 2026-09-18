@@ -21,6 +21,15 @@ const (
 	bearerAuthCtxKey
 )
 
+// SecurityHeaders applies this server's security headers to a handler outside
+// the API, which in practice is the web app. A browser enforces the
+// Content-Security-Policy, the Referrer-Policy and the frame rules only from the
+// response that delivers the page. The page therefore needs these headers more
+// than any API response does.
+func (s *Server) SecurityHeaders(next http.Handler) http.Handler {
+	return s.securityHeaders(next)
+}
+
 func (s *Server) withMiddleware(h http.Handler) http.Handler {
 	// withUser runs before withCSRF so a bearer-authenticated request can be
 	// exempted from the CSRF check (see withCSRF), that decision needs to

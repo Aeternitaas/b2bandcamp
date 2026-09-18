@@ -209,6 +209,20 @@ Prefer `art_url` when it holds a value. Otherwise derive the URL from
 The same applies to a playlist's `cover_art_id` / `cover_art_url`, which both
 describe the first track that has any art.
 
+For a YouTube row, the server derives `artist` and `title` instead of copying
+them. YouTube supplies a channel name and a video title, and neither is the
+field an export needs. The server reads an art-track channel such as
+`Muadeep - Topic` as the artist `Muadeep`, which matches what YouTube Music
+shows. For a normal upload it
+splits a title like `Rick Astley - Never Gonna Give You Up (Official Video)`
+into the artist `Rick Astley` and the title `Never Gonna Give You Up`.
+
+Promotional decoration goes: `(Official Video)`, `[Lyrics]`, `(4K Remaster)`, a
+trailing `| Official Video` and the rest of that family. Anything a DJ needs
+stays, including `(Extended Mix)`, `(Radio Edit)`, `(Someone Remix)`,
+`(Live)` and `ft.` credits. `track_url` always points at the original video, so
+you can check the untouched title there.
+
 A YouTube row looks like this. Note the null `bc_*` fields, and that
 `duration` is `0` when the server has no YouTube API key (see
 `GET /api/sources`):
@@ -361,27 +375,59 @@ It needs no sign-in, because it describes the build and not your data.
   { "id": "bandcamp", "name": "Bandcamp",
     "caps": { "stream": true, "analyze": true, "search": true, "embed": false } },
   { "id": "youtube", "name": "YouTube",
-    "caps": { "stream": false, "analyze": false, "search": false, "embed": true } }
+    "caps": { "stream": true, "analyze": true, "search": true, "embed": false } }
 ] }
 ```
+
+**Read this per instance, not as a constant.** Three of YouTube's four
+capabilities depend on how the server is set up, which is the reason this
+endpoint exists. A `YOUTUBE_API_KEY` turns `search` on. An audio extractor
+(`yt-dlp`) turns `stream` and `analyze` on together, and turns `embed` off. An
+instance with neither answers
+`{ "stream": false, "analyze": false, "search": false, "embed": true }`, and
+still adds YouTube videos by link.
 
 An `id` here is what appears in a track's `source` field. The capabilities
 are what a client should branch on rather than hard-coding a list of sources:
 
-- `stream` - this server can resolve a playable audio URL, so playback goes
-  through `/api/bc/stream/...` and an `<audio>` element.
-- `embed` - playback is the source's own player instead. For YouTube that is
-  the IFrame player, mounted on `source_id`. This server never relays the
-  audio, and must not.
+- `stream` - this server can supply the audio, so playback goes through an
+  `<audio>` element pointed at `/api/bc/stream/...` or `/api/yt/stream/...`.
+  `stream` wins when both flags are true.
+- `embed` - this server has no audio for the row, so playback uses the
+  source's own player. For YouTube that is the IFrame player, mounted on
+  `source_id`. See **Embedding a YouTube row** below before you build it.
 - `analyze` - the browser can get the raw audio same-origin, so in-browser
-  tempo, key and waveform detection can run. This is false for `embed` sources,
-  because the browser never receives their samples. Manual `bpm`,
-  `key_override` and `note` still work on every row.
-- `search` - the source has a catalog search endpoint (`/api/bc/search`).
+  tempo, key and waveform detection can run. It is always equal to `stream`:
+  both need the same samples. Manual `bpm`, `key_override` and `note` work on
+  every row whatever this says.
+- `search` - the source has a catalog search endpoint (`/api/bc/search` or
+  `/api/yt/search`).
+
+### Embedding a YouTube row
+
+A client that plays a row with `embed` true must meet four conditions. A test
+in a real browser, against a built server, checked each one on 2026-09-16.
+
+1. **Load the frame from `https://www.youtube-nocookie.com/embed/`, and load
+   the player script from `https://www.youtube.com/iframe_api`.** The server's
+   Content-Security-Policy permits those two origins only while `embed` is
+   true. An instance with an extractor removes them.
+2. **Set the frame's own referrer policy before you insert it.** The page
+   carries `Referrer-Policy: no-referrer`, and YouTube refuses to play in a
+   frame that sends no referrer. It reports error `153`. Set
+   `referrerPolicy = "strict-origin-when-cross-origin"` on the frame element.
+3. **Give the player a viewport of at least 200 by 200 pixels, and put nothing
+   in front of it.** YouTube's
+   [Required Minimum Functionality](https://developers.google.com/youtube/terms/required-minimum-functionality)
+   requires both. A smaller player still plays today, but it breaks those terms.
+4. **Expect coarse tempo.** The player offers eight rates: 0.25, 0.5, 0.75, 1,
+   1.25, 1.5, 1.75 and 2. It turns a request for 1.03 into exactly 1. Read the
+   rate back with `getPlaybackRate()`, and show that value, not the value you
+   asked for.
 
 The set depends on server configuration: YouTube appears with or without a
 `YOUTUBE_API_KEY`, but without one it cannot report video durations (they
-come back as `0`) or expand playlist links.
+come back as `0`), expand playlist links, search, or browse an account.
 
 ## Bandcamp catalog proxy
 
@@ -438,6 +484,125 @@ straight to Bandcamp's CDN so the bytes never pass through this server.
 cross-origin stream with no CORS headers (which is what Bandcamp's CDN
 sends), it relays the same bytes same-origin, at real bandwidth cost, so
 only use it if you're actually analyzing the waveform.
+
+## YouTube catalog proxy
+
+Everything under `/api/yt/` proxies YouTube's own APIs, cached briefly
+server-side. Rate-limited at 240 requests/minute per caller IP across all of
+`/api/yt/*`, in a bucket of its own: a burst of YouTube browsing must not use up
+an allowance that Bandcamp playback also draws on. None require sign-in.
+
+Every endpoint here needs `YOUTUBE_API_KEY`. Without one the server answers
+`400` and names the variable to set. Check `GET /api/sources` first rather than
+probing.
+
+```
+GET /api/yt/search?q=text&kind=v|p|c      (videos, playlists, channels; kind optional = all)
+```
+One `Result[]`, whatever the kind. Search, channel browsing and playlist
+expansion all return this same shape, so a client that renders one renders all
+three:
+```json
+{ "results": [ {
+  "kind": "v", "id": "dQw4w9WgXcQ",
+  "title": "Never Gonna Give You Up", "artist": "Rick Astley",
+  "channel_id": "UCuAXFkgsw1L7xaCfnd5JJOw",
+  "art_url": "https://i.ytimg.com/vi/dQw4w9WgXcQ/maxresdefault.jpg",
+  "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+  "duration": 213, "item_count": 0, "playable": true
+} ] }
+```
+`kind` is `v` for a video, `p` for a playlist, `c` for a channel. The first two
+match what `POST /api/playlists/{id}/tracks` accepts, so a result's `url` goes
+straight back as an add.
+
+`artist` and `title` are split and cleaned by the rules under **Tracks** above,
+not copied raw, so a search result and the row it becomes read identically.
+`duration` is seconds, and is `0` for a playlist. `item_count` is how many
+videos a playlist holds, and is `0` for anything else. **A `0` in either field
+means "not reported", not "empty"**: show nothing rather than a zero.
+`playable` is false for a video that could never play here, such as one taken
+down, and adding it would produce a row nobody can play.
+
+```
+GET /api/yt/lookup?url=https://youtu.be/dQw4w9WgXcQ
+```
+Describes the video or playlist behind one pasted link, and adds nothing. The
+response is `{ "result": Result }`, one row in the shape above. Show it, and
+send the add only when a person presses Add. This is the YouTube equivalent of
+`POST /api/bc/resolve`.
+
+Do not add a pasted link straight from a render or an effect. The web app used
+to do that, and one paste added the same video twice while music played. Every
+position update re-rendered the popup, and each render queued the add again.
+
+A video link costs 1 quota unit with a key, and no quota without one. A
+playlist link needs `YOUTUBE_API_KEY`, and returns `400` without it. A private
+or removed item returns `404` with a sentence you can show as-is.
+
+Two notes on cost and behavior, because both surprise people:
+
+- **A search costs 100 of the 10,000 daily quota units**, where everything else
+  here costs 1. Identical queries are cached for 15 minutes. Debounce typing.
+- **YouTube treats `type` as a hint, not a filter.** Asking it for playlists
+  also returns the channel it thinks you meant. This server drops anything that
+  does not match the `kind` you asked for, so the results are what you asked
+  for.
+
+```
+GET /api/yt/channel?q=@handle|channel-link|name
+```
+Resolves whatever somebody typed into one channel. It accepts an `@handle`, any
+of YouTube's four channel-link shapes, or a plain channel name. A plain name
+costs a search, at 100 units. The other two forms cost 1.
+```json
+{
+  "id": "UCuAXFkgsw1L7xaCfnd5JJOw", "title": "Rick Astley",
+  "handle": "@rickastleyyt",
+  "image_url": "https://yt3.ggpht.com/...",
+  "uploads_playlist_id": "UUuAXFkgsw1L7xaCfnd5JJOw"
+}
+```
+`uploads_playlist_id` holds everything the channel has posted. Every channel has
+one, and it is the only thing to show for an account that posts videos but
+curates no playlists. Treat it as one more playlist.
+
+```
+GET /api/yt/playlists?channel_id=UC...&page_token=...
+GET /api/yt/playlist?id=PL...&page_token=...
+```
+A channel's public playlists, and the videos inside one playlist. Both page:
+pass the previous response's `next_page_token` back, and stop when it is empty.
+```json
+{ "results": [ ... ], "next_page_token": "" }
+```
+`/api/yt/playlist` returns rows with real durations, which costs it a second
+lookup per page. That is deliberate: YouTube's playlist endpoint reports no
+duration, and titles a deleted video `"Deleted video"`.
+
+```
+GET /api/yt/stream/{videoId}     -> the audio bytes, relayed
+GET /api/yt/audio/{videoId}      -> the whole audio file, same-origin
+```
+These are YouTube's counterparts to `/api/bc/stream` and `/api/bc/audio`, and
+they split the same way: `stream` is what an `<audio>` element's `src` should
+point at, and `audio` is for analysis only.
+
+They differ from Bandcamp's in two ways that matter to a client:
+
+- **`stream` relays rather than redirecting.** Bandcamp signs a URL the
+  listener's own browser may load. A URL resolved for YouTube only works from
+  the address that resolved it, so handing it to a browser gets a `403`. This
+  server forwards Range requests, so seeking still works.
+- **`audio` downloads the file, serves it, and removes it.** Nothing stays on
+  disk between requests. It costs a download per call, which is why it is for
+  analysis and not for playback: analysis happens once per track for everybody
+  on the instance and is then cached as tempo and key. Web Audio decodes a whole
+  buffer rather than reading progressively, and a relayed signed URL is
+  throttled hard enough that loading a whole track through it often stalls.
+
+Both need an audio extractor on the server, which is what `"stream": true`
+reports. Without one they answer `400`.
 
 ## Cached audio analysis
 

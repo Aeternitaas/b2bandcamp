@@ -51,20 +51,37 @@ export function artUrl(artId: number | null | undefined, format: 3 | 9 = 3): str
 }
 
 /**
+ * The cover image for one track.
+ *
+ * A source supplies either an id this app can size for itself, which is what
+ * Bandcamp's CDN allows, or a ready image URL, which is all YouTube publishes.
+ * Reading the two fields anywhere else would mean every view deciding this
+ * again, and getting it wrong for one source.
+ */
+export function trackArt(
+  track: { art_id: number | null; art_url?: string },
+  format: 3 | 9 = 3,
+): string {
+  return track.art_url || artUrl(track.art_id, format)
+}
+
+/**
  * The image to show for a playlist: the explicit cover if one is set, otherwise
- * the album art of its first track. `cover_art_id` is computed server-side so
- * list views work without loading tracks; `tracks` is an extra fallback for
- * views that already have them.
+ * the art of its first track. The two `cover_art_*` fields are computed
+ * server-side, and both describe the same row, so list views work without
+ * loading tracks; `tracks` is an extra fallback for views that already have
+ * them.
  */
 export function playlistCover(
-  playlist: { cover_url: string; cover_art_id: number | null },
+  playlist: { cover_url: string; cover_art_id: number | null; cover_art_url?: string },
   tracks: Track[] = [],
   format: 3 | 9 = 3,
 ): string {
   if (playlist.cover_url) return playlist.cover_url
+  if (playlist.cover_art_url) return playlist.cover_art_url
   if (playlist.cover_art_id) return artUrl(playlist.cover_art_id, format)
-  const withArt = tracks.find((t) => t.art_id)
-  return withArt ? artUrl(withArt.art_id, format) : ''
+  const withArt = tracks.find((t) => t.art_url || t.art_id)
+  return withArt ? trackArt(withArt, format) : ''
 }
 
 export function moveItem<T>(list: T[], from: number, to: number): T[] {
@@ -129,8 +146,4 @@ export async function copyText(text: string): Promise<boolean> {
   } finally {
     document.body.removeChild(field)
   }
-}
-
-export function looksLikeBandcampUrl(value: string): boolean {
-  return /(^https?:\/\/)?[a-z0-9-]+\.bandcamp\.com\/(album|track)\//i.test(value.trim())
 }

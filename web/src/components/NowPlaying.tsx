@@ -4,9 +4,10 @@ import { Modal } from './Modal'
 import { Waveform } from './Waveform'
 import { usePlayer } from '../state/player'
 import { useAuth } from '../state/auth'
-import { artUrl, formatDuration } from '../utils'
+import { formatDuration, trackArt } from '../utils'
 import { centsOffset, semitonesForRate, transposeKey } from '../audio/analysis'
-import type { Playlist, Tralbum } from '../types'
+import { sourceMeta } from '../sources'
+import type { Playlist, Track, Tralbum } from '../types'
 import { Icon } from './Icon'
 
 type Tab = 'analysis' | 'album' | 'save'
@@ -16,6 +17,12 @@ const TABS: { key: Tab; label: string }[] = [
   { key: 'album', label: 'Album' },
   { key: 'save', label: 'Save to…' },
 ]
+
+/** The album tab is about a release this track sits on, which only a source
+ *  that has releases can answer. A video belongs to no album. */
+function tabsFor(track: Track): { key: Tab; label: string }[] {
+  return track.bc_album_id ? TABS : TABS.filter((t) => t.key !== 'album')
+}
 
 /** Percentage steps, mirroring the detents on a DJ pitch fader. */
 const RATE_STEPS = [-20, -10, -5, 0, 5, 10, 20]
@@ -29,6 +36,9 @@ export function NowPlaying({ onClose }: { onClose: () => void }) {
 
   const track = player.current
   const { analysis, analyze } = player
+  // A tab that stops applying while it is open, because playback moved on to
+  // a track with no album, would otherwise show its empty state forever.
+  const tabs = track ? tabsFor(track) : TABS
 
   // Analysis is opt-in: it downloads the whole track through the proxy, so it
   // should not happen just because playback started.
@@ -48,8 +58,8 @@ export function NowPlaying({ onClose }: { onClose: () => void }) {
     <Modal title="Now playing" onClose={onClose}>
       <div className="col">
         <div className="row" style={{ alignItems: 'flex-start' }}>
-          {track.art_id
-            ? <img className="cover lg" src={artUrl(track.art_id, 9)} alt="" />
+          {trackArt(track, 9)
+            ? <img className="cover lg" src={trackArt(track, 9)} alt="" />
             : <div className="cover lg"><Icon name="music" size={34} /></div>}
 
           <div className="col" style={{ gap: 4, minWidth: 0, flex: 1 }}>
@@ -65,14 +75,15 @@ export function NowPlaying({ onClose }: { onClose: () => void }) {
                 className="small"
                 style={{ marginTop: 4 }}
               >
-                Open on Bandcamp <Icon name="external-link" size={12} />
+                {sourceMeta(track.source).linkLabel}{' '}
+                <Icon name={sourceMeta(track.source).icon} size={12} />
               </a>
             )}
           </div>
         </div>
 
         <div className="tabs" role="tablist">
-          {TABS.map((t) => (
+          {tabs.map((t) => (
             <button key={t.key} role="tab" aria-selected={tab === t.key} onClick={() => setTab(t.key)}>
               {t.label}
             </button>
@@ -83,7 +94,7 @@ export function NowPlaying({ onClose }: { onClose: () => void }) {
           <AnalysisTab progress={progress} />
         )}
 
-        {tab === 'album' && (
+        {tab === 'album' && tabs.some((t) => t.key === 'album') && (
           <AlbumTab
             albumId={track.bc_album_id}
             bandId={track.bc_band_id}
@@ -91,14 +102,7 @@ export function NowPlaying({ onClose }: { onClose: () => void }) {
           />
         )}
 
-        {tab === 'save' && (
-          <SaveTab
-            signedIn={!!user}
-            trackId={track.bc_track_id}
-            bandId={track.bc_band_id}
-            sourcePlaylistId={track.playlist_id}
-          />
-        )}
+        {tab === 'save' && <SaveTab signedIn={!!user} track={track} />}
       </div>
     </Modal>
   )
@@ -246,7 +250,7 @@ function AnalysisTab({ progress }: { progress: number }) {
 
 function AlbumTab({
   albumId, bandId, currentTrackId,
-}: { albumId: number | null; bandId: number | null; currentTrackId: number }) {
+}: { albumId: number | null; bandId: number | null; currentTrackId: number | null }) {
   const player = usePlayer()
   const [album, setAlbum] = useState<Tralbum | null>(null)
   const [loading, setLoading] = useState(false)
@@ -314,9 +318,7 @@ function AlbumTab({
   )
 }
 
-function SaveTab({
-  signedIn, trackId, bandId, sourcePlaylistId,
-}: { signedIn: boolean; trackId: number; bandId: number | null; sourcePlaylistId: number }) {
+function SaveTab({ signedIn, track }: { signedIn: boolean; track: Track }) {
   const [playlists, setPlaylists] = useState<Playlist[]>([])
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState<number | null>(null)
@@ -331,19 +333,25 @@ function SaveTab({
       .finally(() => setLoading(false))
   }, [signedIn])
 
+  // Bandcamp rows carry the ids an add wants, so they skip the resolve step.
+  // Anything else goes by its own link, which every source can be added by.
   const save = useCallback(async (playlistId: number) => {
-    if (!bandId) return
+    const payload = track.bc_track_id && track.bc_band_id
+      ? { items: [{ type: 't' as const, id: track.bc_track_id, band_id: track.bc_band_id }] }
+      : { url: track.track_url }
+    if (!payload.url && !payload.items) return
+
     setBusy(playlistId)
     setError('')
     try {
-      await api.addTracks(playlistId, { items: [{ type: 't', id: trackId, band_id: bandId }] })
+      await api.addTracks(playlistId, payload)
       setSaved((prev) => new Set(prev).add(playlistId))
     } catch (e) {
       setError((e as Error).message)
     } finally {
       setBusy(null)
     }
-  }, [trackId, bandId])
+  }, [track])
 
   if (!signedIn) {
     return <div className="empty">Sign in to save this track to your own playlists.</div>
@@ -358,7 +366,7 @@ function SaveTab({
       {targets.length === 0 && <div className="empty">You have no other playlists yet.</div>}
 
       {targets.map((p) => {
-        const isSource = p.id === sourcePlaylistId
+        const isSource = p.id === track.playlist_id
         const isSaved = saved.has(p.id)
         return (
           <div className="row" key={p.id}>

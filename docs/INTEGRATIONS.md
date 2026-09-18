@@ -14,13 +14,18 @@ that, and uses YouTube as the second implementation. Section 1 records the
 coupling as it stood, because every decision after it answers something there.
 
 Bandcamp stays **first-class**. It keeps search, wishlist browsing,
-server-resolved streaming, and audio analysis. YouTube is **second-class**. A
-person can add it by link, see it in the list, and play it in YouTube's own
-embedded player. Nothing more.
+server-resolved streaming, and audio analysis.
 
-The point of the contract is that "second-class" means a set of capability flags
-that a provider declines to set. It does not mean a pile of special cases in the
-handlers.
+YouTube started as **second-class**, and this document was written that way. A
+person could add it by link, see it in the list, and play it in YouTube's own
+embedded player. Nothing more. **Section 12 records how that changed**, and why
+the change cost so little. Sections 1 to 11 keep the original wording, because
+the reasoning is what makes section 12 legible. Where a statement in them is now
+false, a note beside it says so.
+
+The point of the contract is that a class is a set of capability flags, not a
+pile of special cases in the handlers. What makes that claim worth anything is
+that YouTube changed class without the contract changing at all.
 
 ## 1. Where the Bandcamp coupling sat
 
@@ -104,7 +109,7 @@ type Provider interface {
 
 // Streamer is implemented by providers whose audio this server can hand to a
 // browser. Bandcamp resolves a short-lived signed CDN url per play. YouTube
-// does not implement it, and must not: its terms require its own player.
+// does not implement it.
 type Streamer interface {
 	StreamURL(ctx context.Context, t Ref) (string, error)
 }
@@ -344,6 +349,10 @@ with `embed: true`, then mounts YouTube's IFrame player on `source_id`. That is
 the only permitted way to play it. It also adds no server surface, which is a
 good sign that the seam sits in the right place.
 
+> **No longer true.** `/api/yt/*` now exists: search, channel and playlist
+> browsing, and two audio endpoints. See section 12. The paragraph above stands
+> as the reasoning that made the endpoints optional rather than assumed.
+
 **`fail()`** ([server.go:118](../server/internal/api/server.go#L118)) drops the
 `bandcamp.ErrNotFound` case in favour of a `source.ErrNotFound` that providers
 wrap, so a new provider's not-found does not fall through to a `500`.
@@ -361,15 +370,18 @@ difference between "add a provider" and "add a provider and remember to go edit
 the security headers".
 
 ```go
-// Frame is the set of origins a provider's playback needs. Each provider
-// declares its own, and securityHeaders merges them into the policy.
-type Frame struct {
-	Media  []string // media-src, direct audio
-	Script []string // script-src, a provider-supplied player
-	Frame  []string // frame-src, an embedded player
-	Connect []string
+// CSP is the set of origins a provider's playback needs. Each provider
+// declares its own, and the API layer merges them once at startup.
+type CSP struct {
+	Media   []string // media-src, direct audio
+	Script  []string // script-src, a provider-supplied player
+	Frame   []string // frame-src, an embedded player
+	Connect []string // connect-src
 }
 ```
+
+The design called this type `Frame`, with a `Frame()` method. The code calls it
+`source.CSP`, with a `CSP()` method, because the type covers more than framing.
 
 Bandcamp returns `Media: {"https://*.bcbits.com", "https://bandcamp.com"}`,
 reproducing today's policy exactly. YouTube returns
@@ -380,6 +392,29 @@ per request, so the header stays a constant string in the hot path.
 Note that `X-Frame-Options: DENY` and `frame-ancestors 'none'` control who may
 frame *this app*. They have nothing to do with `frame-src`, and they stay as
 they are.
+
+### The page must carry the headers
+
+A browser enforces a Content-Security-Policy only from the response that
+delivers the page. The same is true of `Referrer-Policy` and of the frame
+rules. A policy on a JSON response governs nothing the user sees.
+
+Until 2026-09-16, only `/api/` responses carried these headers. The web app
+itself, at `/`, carried none. The live site therefore ran with no CSP, no
+`Referrer-Policy` and no `X-Frame-Options`, so any site could frame it. The
+policy that the README describes never reached a browser. Traefik adds only
+`X-Robots-Tag`, so it did not cover the gap.
+
+`routes()` in [main.go](../server/main.go) now wraps the web app with the same
+`securityHeaders` that the API uses, through `api.Server.SecurityHeaders`. One
+policy string serves both halves. `TestPageCarriesSecurityHeaders` in
+[main_test.go](../server/main_test.go) checks `/`, a client route, an asset
+and `/api/health`, and fails if the page and the API ever send different
+policies. With the wrap removed, the test fails on the three page paths.
+
+A real browser checked the change before it shipped. Headless Chromium loaded
+the built app in both YouTube modes and reported no CSP violations and no
+console errors, and the app rendered.
 
 ## 7. The YouTube provider
 
@@ -413,13 +448,55 @@ even heavy use is unlikely to approach it. Catalog search is deliberately not
 implemented: `search.list` costs 100 units per call, which would exhaust the
 daily quota in 100 searches, and search is a first-class feature anyway.
 
-`Caps` is `{Stream: false, Analyze: false, Search: false, Embed: true}`.
+> **Superseded.** Search is implemented, and the quota arithmetic above is why
+> it caches every query for 15 minutes. See section 12.
+
+### Artist and track names
+
+YouTube gives a video title and a channel name. Neither one is the artist and
+track that an export needs, so the provider derives both. `metadata.go` holds
+that work. Three shapes cover almost everything YouTube returns.
+
+**An auto-generated art track.** The channel is `Muadeep - Topic` and the title
+is `Tsunami`. YouTube Music displays the artist as `Muadeep`, and so does this
+provider. The channel names the artist exactly, so the provider trusts it and
+does not split the title. Splitting would be wrong for a track whose own name
+holds a dash, such as `Blue Monday - 2016 Remaster`.
+
+**A normal upload.** The channel is `Rick Astley` and the title is
+`Rick Astley - Never Gonna Give You Up (Official Video) (4K Remaster)`. The
+title carries `artist - track`, so the provider splits on the first separator.
+It accepts a hyphen, an en dash or an em dash, and it requires spaces on both
+sides. `Jay-Z` therefore stays one word.
+
+**An upload with no separator.** The channel is `Alan Walker` and the title is
+`Faded`. The channel is the best artist available. The provider strips the
+decoration that channel names carry, so `LuisFonsiVEVO` becomes `LuisFonsi` and
+`Queen Official` becomes `Queen`.
+
+The provider then removes promotional decoration from the track title:
+`(Official Video)`, `[Lyrics]`, `(4K Remaster)`, `| Official Video`, a trailing
+`M/V`, and the rest of that family.
+
+**Removal is deliberately conservative.** A bracketed group goes only when its
+whole content matches a known promotional phrase. Any group that holds a word a
+DJ needs stays, whatever else it says. That list covers mix, remix, edit,
+version, feat, live, acoustic, extended, radio, club, original, instrumental and
+more. Losing `(Extended Mix)` from a track title is far worse than keeping an
+occasional `(Official Live Video)`, because the two records are different
+records.
+
+The provider never returns an empty field. If stripping would empty a title, it
+keeps the original.
+
+`Caps` was `{Stream: false, Analyze: false, Search: false, Embed: true}`. It is
+now computed from how the instance is configured. Section 12 gives the values
+and what turns each one on. The reasoning that fixed them at `false` was this:
 `Analyze` is false because BPM, key and waveform detection all require the raw
 audio samples same-origin, which is what `/api/bc/audio` exists to provide
 ([bandcamp_handlers.go:170-178](../server/internal/api/bandcamp_handlers.go#L170-L178)),
-and YouTube's terms do not permit that relay. Manual `bpm`, `key_override` and
-`note` still work on YouTube rows, because those columns were never
-Bandcamp-specific.
+Manual `bpm`, `key_override` and `note` still work on YouTube rows, because those
+columns were never Bandcamp-specific.
 
 The 53-line TTL cache in [cache.go](../server/internal/bandcamp/cache.go) is
 worth lifting to `internal/source/cache.go` and sharing, rather than copied.
@@ -428,7 +505,11 @@ worth lifting to `internal/source/cache.go` and sharing, rather than copied.
 
 Falls out of `Caps`, which is the point.
 
-| | Bandcamp | YouTube |
+The YouTube column is what this table said before section 12. It now reads as
+that section's table does, and the two are worth comparing: every row that
+changed, changed by a provider setting a flag it had declined to set.
+
+| | Bandcamp | YouTube (as first written) |
 | --- | --- | --- |
 | Add by pasted link | yes | yes |
 | Add from catalog search | yes | no |
@@ -525,6 +606,163 @@ The end-to-end method that found them is worth reusing: build a binary from
 `HEAD` and one from the working tree, run both against separate databases,
 drive the same requests at each, and diff the responses with timestamps and row
 ids normalised. It turns "I think this is compatible" into a byte comparison.
+
+## 12. YouTube as a first-class source
+
+Sections 1 to 11 describe YouTube as second-class. It is not any more, and this
+section records what changed. Read it as the test of the contract, because that
+is what it turned out to be: **no file in `internal/source`, `internal/store` or
+the add path changed.** Section 9 claims a source's class is a set of flags.
+Changing YouTube's class changed those flags and added endpoints beside them.
+
+### What drove it
+
+Three things a person wanted, none of which the design allowed:
+
+1. Search YouTube from the add-music popup, not only paste links into it.
+2. Browse a YouTube account's public playlists, the way the wishlist browses a
+   Bandcamp fan's wishlist.
+3. Detect tempo and key on YouTube rows, the same as on Bandcamp rows.
+
+The first two were refused on quota. The third was refused on a hard fact: the
+browser never sees the samples, so nothing client-side can measure them.
+
+### The extractor, and what it decides
+
+One decision answers all three. **The server runs an audio extractor (`yt-dlp`)
+to fetch a video's audio.** Once the audio is reachable, playback and analysis
+both follow, because they are one question and not two. Section 7 said `Analyze`
+is false because the samples never arrive same-origin. That was right. The
+extractor is what makes them arrive.
+
+This is the one part of the integration that depends on something outside the
+binary, so it is optional and checked once at startup:
+
+```go
+yt := youtube.New(cfg.YouTubeAPIKey, youtube.WithExtractor(cfg.YTDLPPath))
+```
+
+`Caps` is then computed rather than constant, which is the shape section 2
+argued for and the first implementation did not need:
+
+| Flag | True when |
+| --- | --- |
+| `Stream` | an extractor is on PATH |
+| `Analyze` | the same, because both need the same samples |
+| `Search` | `YOUTUBE_API_KEY` is set |
+| `Embed` | no extractor, so the iframe player is the only way to play a row |
+
+With neither configured, YouTube behaves exactly as sections 1 to 11 describe.
+That is the point of putting the answer in `Caps`: the degraded instance is not
+a special case, it is the same code reporting less.
+
+`CSP()` follows. With an extractor the provider asks for no origins at all,
+because the audio comes from this server and thumbnails are already covered by
+the blanket `https:` `img-src`. The iframe origins are only in the policy on an
+instance that uses the iframe. An origin nothing loads from is still an origin
+the policy permits.
+
+### The two audio endpoints, and why there are two
+
+`/api/yt/stream/{videoId}` relays the bytes for playback.
+`/api/yt/audio/{videoId}` downloads the file, serves it, and removes it.
+
+Bandcamp splits the same way and for a related reason, but the mechanics differ
+on both halves:
+
+- **`stream` relays where Bandcamp redirects.** A signed Bandcamp URL works from
+  the listener's browser. A URL the extractor resolves carries the address that
+  resolved it, so a browser on any other address receives a `403`.
+- **`audio` downloads to a temporary directory rather than relaying.** Web Audio
+  decodes a whole buffer rather than reading progressively, and a relayed signed
+  URL is throttled hard enough that a full track often stalls. The extractor
+  knows how to work around that. A plain proxy does not.
+
+Nothing stays on disk between requests. One directory per download, removed
+whole, so a partial file cannot outlive the request either. That costs a
+download per analysis, which is the right trade: analysis runs once per track
+for every user of the instance, and its result is then a row of tempo and key in
+the database. Audio kept on disk would accumulate for a feature that has already
+finished with it.
+
+### Search, and the quota
+
+`search.list` costs 100 of the 10,000 daily units. Section 7 called that
+disqualifying. It is affordable with two things the first version lacked:
+
+- Every query is cached for 15 minutes, so going back to an earlier search costs
+  nothing.
+- The client debounces typing, so a search is one call and not one per keystroke.
+
+Everything else costs 1 unit: channel lookup, listing playlists, expanding one.
+A search enriches its own results with a second call for durations and playlist
+lengths, because a list with neither is hard to read, and one more unit next to
+a hundred is not the expensive part.
+
+**YouTube treats `type` as a hint.** Asking `search.list` for playlists also
+returns the channel it thinks you meant. The provider drops anything that does
+not match the requested kind. This is worth stating because it is not in
+Google's documentation and it looks like a bug in this code.
+
+### The embedded player
+
+An instance with no extractor plays YouTube rows in YouTube's iframe player. A
+headless browser tested that path on 2026-09-16, against a built image, under
+the real policy. Four facts came out of it.
+
+**The frame must set its own referrer policy.** The page sends
+`Referrer-Policy: no-referrer`, and YouTube refuses to play in a frame that
+sends no referrer. It reports error `153`. The web app creates the frame itself
+and sets `referrerPolicy = 'strict-origin-when-cross-origin'` before it inserts
+the frame, and inserting it is what starts the load. In the test, a frame with
+that attribute reached `playing`. A frame without it inherited `no-referrer` and
+failed with `153`. Keep the server header as it is, and keep the attribute in
+[player.tsx](../web/src/state/player.tsx). Removing either one breaks
+something.
+
+**The player is smaller than YouTube's terms allow.** YouTube's
+[Required Minimum Functionality](https://developers.google.com/youtube/terms/required-minimum-functionality)
+says: "Embedded players must have a viewport that is at least 200px by 200px."
+The web app renders the player at 78 by 44, in the artwork's place. That size
+played without error in the test, so YouTube does not enforce the rule today.
+It still breaks the terms, and YouTube could start to enforce the rule at any
+time. The same page also forbids any overlay in front of any part of the
+player, so nothing may sit on top of that slot.
+
+**Tempo control does not work for beatmatching.** The iframe player offers
+eight rates: 0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75 and 2. In the test, a request
+for 1.03 came back as exactly 1. Every adjustment in the range a DJ uses
+therefore snaps to normal speed, and the tempo slider displays that. An instance
+with an extractor has no such limit, because the row then plays in an `<audio>`
+element, whose rate is continuous.
+
+**No detection runs.** The browser never receives the samples, so tempo, key
+and waveform detection cannot run, and the server refuses to store results for
+these rows. The BPM and key readouts display only what is already stored: a manual
+override, or an analysis saved while this instance had an extractor.
+
+All four limits disappear with an extractor, which the production image now
+installs. The embedded player remains the fallback for an instance without one.
+
+### What did not change
+
+The list is the load-bearing part of this section:
+
+- `internal/source` is untouched. No new field, no new method, no new optional
+  interface. `Streamer` was already there for exactly this.
+- No migration. `source`, `source_id` and `art_url` already carried everything a
+  YouTube row needs.
+- `handleAddTracks` is untouched. Adding a link already went through the
+  registry.
+- The analysis handlers are untouched. They gate on `Caps().Analyze`, so
+  flipping that flag was the whole change. Writes that were refused with a `400`
+  now succeed, through the same code.
+
+Section 9 says that if adding a source requires touching `internal/api` or
+`internal/store`, the contract is wrong. Promoting one required touching
+`internal/api`, and only to add endpoints that are YouTube's own, beside
+Bandcamp's own. That is the same exception section 3 already carved out for
+`s.bc`, and `s.yt` sits next to it for the same reason.
 
 ## 11. Open points
 

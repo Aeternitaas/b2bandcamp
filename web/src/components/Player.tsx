@@ -4,7 +4,7 @@ import { Waveform } from './Waveform'
 import { useCompactLayout } from '../hooks/useMediaQuery'
 import { centsOffset, semitonesForRate, transposeKey } from '../audio/analysis'
 import { usePlayer } from '../state/player'
-import { artUrl, formatDuration as fmt } from '../utils'
+import { formatDuration as fmt, trackArt } from '../utils'
 import { Icon } from './Icon'
 
 export function Player() {
@@ -96,15 +96,22 @@ export function Player() {
           reserve more room when they appear. */}
       <div className="player" ref={measureBar}>
         <div className="player-inner">
-          <button
-            className="ghost p-art"
-            onClick={() => setExpanded(true)}
-            aria-label="Open now playing"
-          >
-            {current.art_id
-              ? <img className="player-art" src={artUrl(current.art_id, 3)} alt="" loading="lazy" />
-              : <span className="player-art" />}
-          </button>
+          {/* A YouTube row that the server cannot stream plays in YouTube's
+              own player, in the artwork's place. The slot has a fixed size,
+              so the iframe cannot change the layout of the bar. */}
+          {player.embedded ? (
+            <div className="p-art p-yt" ref={player.attachEmbed} />
+          ) : (
+            <button
+              className="ghost p-art"
+              onClick={() => setExpanded(true)}
+              aria-label="Open now playing"
+            >
+              {trackArt(current, 3)
+                ? <img className="player-art" src={trackArt(current, 3)} alt="" loading="lazy" />
+                : <span className="player-art" />}
+            </button>
+          )}
 
           {/* On a phone there is no room for both, so the analysis readouts
               take the metadata's place rather than growing the bar. */}

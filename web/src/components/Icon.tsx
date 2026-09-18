@@ -5,6 +5,11 @@
  * in rather than loaded from a CDN, the app's Content-Security-Policy allows
  * no external scripts or stylesheets, and the PWA has to render offline.
  *
+ * The two brand marks are from Simple Icons (CC0, https://simpleicons.org),
+ * which is where the official glyphs live; Feather carries no brand icons.
+ * They are solid shapes rather than outlines, so they are drawn filled and
+ * unstroked, which is how each brand's own guidelines require them.
+ *
  * Emoji are deliberately not used anywhere in the UI: their glyphs are supplied
  * by the OS font, so the same character renders differently (or not at all)
  * across platforms, and screen readers announce them unpredictably.
@@ -16,6 +21,10 @@ export type IconName =
   | 'check' | 'volume' | 'volume-low' | 'volume-mute' | 'plus'
   | 'arrow-left' | 'disc' | 'user' | 'chevron-down' | 'search'
   | 'trash' | 'link' | 'edit' | 'activity' | 'list' | 'rotate-ccw'
+  | 'bandcamp' | 'youtube'
+
+/** Solid brand marks, drawn as filled shapes with no stroke. */
+const BRAND: ReadonlySet<IconName> = new Set<IconName>(['bandcamp', 'youtube'])
 
 interface Props {
   name: IconName
@@ -54,10 +63,13 @@ const PATHS: Record<IconName, JSX.Element> = {
   activity: <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />,
   list: <><line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" /><line x1="8" y1="18" x2="21" y2="18" /><line x1="3" y1="6" x2="3.01" y2="6" /><line x1="3" y1="12" x2="3.01" y2="12" /><line x1="3" y1="18" x2="3.01" y2="18" /></>,
   'rotate-ccw': <><polyline points="1 4 1 10 7 10" /><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" /></>,
+  bandcamp: <path d="M0 18.75l7.437-13.5H24l-7.438 13.5H0z" />,
+  youtube: <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />,
 }
 
 export function Icon({ name, size = 16, label, className, strokeWidth = 2 }: Props) {
-  const filled = name === 'play' || name === 'pause'
+  const brand = BRAND.has(name)
+  const filled = brand || name === 'play' || name === 'pause'
 
   return (
     <svg
@@ -66,7 +78,9 @@ export function Icon({ name, size = 16, label, className, strokeWidth = 2 }: Pro
       height={size}
       viewBox="0 0 24 24"
       fill={filled ? 'currentColor' : 'none'}
-      stroke="currentColor"
+      // A brand mark is one solid shape. Outlining it would thicken every
+      // edge and, on the YouTube glyph, fill in its play triangle.
+      stroke={brand ? 'none' : 'currentColor'}
       strokeWidth={strokeWidth}
       strokeLinecap="round"
       strokeLinejoin="round"

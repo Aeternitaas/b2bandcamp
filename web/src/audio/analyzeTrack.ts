@@ -1,4 +1,5 @@
 import { api } from '../api'
+import type { Track } from '../types'
 import type { KeyResult, TempoResult } from './analysis'
 import type { AnalyzeRequest, AnalyzeResponse } from './analyzer.worker'
 
@@ -47,12 +48,20 @@ const pending = new Map<number, {
 }>()
 
 /**
- * Analyses already running, keyed by track. Analysing one track twice at once
- *, say the player panel and a batch run reaching it together, would download
- * and decode the same audio twice and race to write the same cache row, so
- * callers share the in-flight promise instead.
+ * Analyses already running, keyed by source and that source's id. Analysing one
+ * track twice at once, say the player panel and a batch run reaching it
+ * together, would download and decode the same audio twice and race to write
+ * the same cache row, so callers share the in-flight promise instead.
  */
-const inFlight = new Map<number, Promise<TrackAnalysis>>()
+const inFlight = new Map<string, Promise<TrackAnalysis>>()
+
+/** What identifies a track to the analyser: where it came from, and its id
+ *  there. Any playlist row or preview satisfies this. */
+export type AnalyzableTrack = Pick<Track, 'source' | 'source_id' | 'source_ref'>
+
+function cacheKey(track: AnalyzableTrack): string {
+  return `${track.source}:${track.source_id}`
+}
 
 function getWorker(): Worker {
   if (worker) return worker
@@ -77,13 +86,12 @@ function getWorker(): Worker {
 /** Decodes audio to mono PCM. Must run on the main thread: decodeAudioData
  *  needs an AudioContext, which workers do not reliably have. */
 async function decodeMono(
-  trackId: number,
-  bandId: number,
+  track: AnalyzableTrack,
   signal?: AbortSignal,
 ): Promise<{ samples: Float32Array; sampleRate: number }> {
-  // The proxied endpoint is same-origin, so Web Audio may read the samples;
-  // the CDN URL used for playback is not.
-  const res = await fetch(api.audioUrl(trackId, bandId), { signal })
+  // This endpoint is same-origin, so Web Audio may read the samples; what
+  // playback uses is not, for Bandcamp, and is not a whole file, for YouTube.
+  const res = await fetch(api.audioUrl(track), { signal })
   if (!res.ok) throw new Error(`could not fetch audio (${res.status})`)
   const bytes = await res.arrayBuffer()
 
@@ -111,35 +119,36 @@ async function decodeMono(
 /**
  * Analyses a track, reusing the server's cached result when there is one.
  *
- * The cache is keyed by Bandcamp track id, so a track analysed in one playlist
- * is already done everywhere it appears, for every user. A hit skips the
- * download and decode entirely, which is the expensive part.
+ * The cache is keyed by the source and that source's own track id, so a track
+ * analysed in one playlist is already done everywhere it appears, for every
+ * user. A hit skips the download and decode entirely, which is the expensive
+ * part, and the expense differs by source: Bandcamp relays the bytes, where
+ * YouTube has the server download the file and throw it away afterwards.
  */
 export function analyzeTrack(
-  trackId: number,
-  bandId: number,
+  track: AnalyzableTrack,
   opts: { buckets?: number; signal?: AbortSignal; force?: boolean } = {},
 ): Promise<TrackAnalysis> {
-  const existing = inFlight.get(trackId)
+  const key = cacheKey(track)
+  const existing = inFlight.get(key)
   if (existing && !opts.force) return existing
 
-  const run = runAnalysis(trackId, bandId, opts)
-  inFlight.set(trackId, run)
+  const run = runAnalysis(track, opts)
+  inFlight.set(key, run)
   // Clear the slot either way; a failure should not poison later attempts.
   void run.finally(() => {
-    if (inFlight.get(trackId) === run) inFlight.delete(trackId)
+    if (inFlight.get(key) === run) inFlight.delete(key)
   })
   return run
 }
 
 async function runAnalysis(
-  trackId: number,
-  bandId: number,
+  track: AnalyzableTrack,
   opts: { buckets?: number; signal?: AbortSignal; force?: boolean },
 ): Promise<TrackAnalysis> {
   if (!opts.force) {
     try {
-      const cached = await api.getAnalysis(trackId)
+      const cached = await api.getAnalysis(track.source, track.source_id)
       if (cached) {
         return {
           peaks: decodePeaks(cached.peaks ?? ''),
@@ -163,7 +172,7 @@ async function runAnalysis(
     }
   }
 
-  const { samples, sampleRate } = await decodeMono(trackId, bandId, opts.signal)
+  const { samples, sampleRate } = await decodeMono(track, opts.signal)
 
   const id = nextId++
   const request: AnalyzeRequest = {
@@ -181,7 +190,7 @@ async function runAnalysis(
 
   // Publish it so nobody repeats this work. Failures here (not signed in, for
   // instance) must not fail the analysis the caller asked for.
-  api.saveAnalysis(trackId, {
+  api.saveAnalysis(track.source, track.source_id, {
     bpm: result.tempo.bpm > 0 ? result.tempo.bpm : null,
     bpm_confidence: result.tempo.confidence,
     key_name: result.key?.name ?? '',

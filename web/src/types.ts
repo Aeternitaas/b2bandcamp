@@ -18,7 +18,9 @@ export interface Playlist {
   title: string
   description: string
   cover_url: string
+  /** Both describe the first track that has any art, so exactly one is set. */
   cover_art_id: number | null
+  cover_art_url: string
   visibility: Visibility
   has_share_link: boolean
   sort_index: number
@@ -29,11 +31,45 @@ export interface Playlist {
   role: Role
 }
 
+/** The integrations this build knows by name. The server is the authority on
+ *  which are actually available; see useSourceCaps. */
+export type SourceId = 'bandcamp' | 'youtube'
+
+/** What a client may do with one source's tracks, from GET /api/sources.
+ *  These depend on how the server is configured, not on which source it is. */
+export interface SourceCaps {
+  /** The server can resolve a playable audio URL for these rows. */
+  stream: boolean
+  /** Raw audio is reachable same-origin, so tempo and key detection can run. */
+  analyze: boolean
+  /** The source has a catalog search this server can proxy. */
+  search: boolean
+  /** Playback is the source's own embedded player. */
+  embed: boolean
+}
+
+export interface SourceInfo {
+  id: string
+  name: string
+  caps: SourceCaps
+}
+
 export interface Track {
   id: number
   playlist_id: number
   position: number
-  bc_track_id: number
+  /** Which integration this row came from, and that integration's own id for
+   *  it. Together they are the row's identity: they key the analysis cache and
+   *  are what playback resolves against. */
+  source: SourceId
+  source_id: string
+  /** An opaque handle the integration needs to act on the row later. For
+   *  Bandcamp that is the band id; YouTube needs none. Meaningless elsewhere. */
+  source_ref: string
+  /** The older Bandcamp-only identity, kept working for existing clients and
+   *  null on any row that did not come from Bandcamp. New code reads
+   *  source/source_id instead. */
+  bc_track_id: number | null
   bc_album_id: number | null
   bc_band_id: number | null
   title: string
@@ -50,7 +86,11 @@ export interface Track {
   detected_bpm: number | null
   key_camelot: string
   key_name: string
+  /** Art comes as either an id or a URL, never both: Bandcamp's id lets each
+   *  view pick its own pixel size, where a source that only publishes images
+   *  fills art_url. Use trackArt rather than reading these directly. */
   art_id: number | null
+  art_url: string
   track_url: string
   added_by: number | null
   added_at: string
@@ -65,6 +105,7 @@ export interface ShareLink {
   token: string
   cover_url: string
   cover_art_id: number | null
+  cover_art_url: string
   track_count: number
   collaborators: number
   updated_at: string
@@ -176,4 +217,54 @@ export interface TrackRef {
   type: 'a' | 't'
   id: number
   band_id: number
+}
+
+/**
+ * What an "add to this playlist" call carries: Bandcamp's own ids, a link from
+ * any source, or both at once. This is the request body of
+ * POST /api/playlists/{id}/tracks, and the one shape every add path in the app
+ * hands around, so a Bandcamp album and a YouTube link travel the same way.
+ */
+export interface AddPayload {
+  url?: string
+  items?: TrackRef[]
+}
+
+/**
+ * One thing found on YouTube: a video, a playlist, or a channel.
+ *
+ * Search results, a channel's playlists and a playlist's contents all arrive in
+ * this one shape, so the views that list them share their rendering the way the
+ * Bandcamp views share theirs.
+ */
+export interface YTResult {
+  kind: 'v' | 'p' | 'c'
+  id: string
+  title: string
+  /** The channel, already split out of the video title where the two were
+   *  combined. See the server's metadata rules. */
+  artist: string
+  channel_id: string
+  art_url: string
+  url: string
+  /** Seconds; 0 for a playlist, or for a video on an instance with no API key. */
+  duration: number
+  /** How many videos a playlist holds; 0 for anything else. */
+  item_count: number
+  /** False for a video that cannot be played here at all, such as one taken
+   *  down. Adding it would produce a row nobody could play. */
+  playable: boolean
+}
+
+/** A YouTube account, as the wishlist view's YouTube half browses one. */
+export interface YTChannel {
+  id: string
+  title: string
+  /** The @handle, when the channel has one. */
+  handle: string
+  image_url: string
+  /** The playlist holding everything the channel has posted. Every channel has
+   *  one, which is what there is to show for an account that curates no
+   *  playlists of its own. */
+  uploads_playlist_id: string
 }

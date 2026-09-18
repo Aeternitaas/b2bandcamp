@@ -46,6 +46,18 @@ FROM alpine:3.20
 RUN apk add --no-cache ca-certificates tzdata wget \
     && adduser -D -H -u 10001 app
 
+# yt-dlp lets this server relay YouTube audio, and that relay is what makes
+# YouTube rows analysable. It is optional at runtime. With no extractor on PATH,
+# the server still adds YouTube links, but it reports stream and analyze as
+# false. The web app then plays those rows in YouTube's embedded player, and
+# the rows get no tempo or key detection.
+#
+# It comes from PyPI rather than from apk because YouTube changes often enough
+# that an extractor is only as good as how recently it was released, and the
+# distribution package lags by months. Rebuilding this image updates it.
+RUN apk add --no-cache python3 py3-pip \
+    && pip install --no-cache-dir --break-system-packages yt-dlp
+
 WORKDIR /app
 
 COPY --from=server /out/b2bandcamp /app/b2bandcamp

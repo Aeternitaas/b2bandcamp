@@ -4,22 +4,34 @@ import { api } from '../api'
 import { AddToPlaylistButton } from './AddToPlaylistButton'
 import { WishlistAlbumMenu } from './WishlistAlbumMenu'
 import { WishlistAlbumTracks } from './WishlistAlbumTracks'
-import { usePreview } from '../audio/usePreview'
+import { bcSource, usePreview } from '../audio/usePreview'
 import { useAuth } from '../state/auth'
-import type { Fan, Playlist, TrackRef, WishlistItem } from '../types'
+import { capsOf, useSourceCaps } from '../sources'
+import { EMPTY_YT_CACHE, YouTubeWishlist } from './YouTubeWishlist'
+import type { YTWishlistCache } from './YouTubeWishlist'
+import type { AddPayload, Fan, Playlist, SourceId, WishlistItem } from '../types'
 import { Icon } from './Icon'
 
 /** Everything about the last-loaded wishlist, held by the parent so it
  *  survives the panel closing and reopening, closing this panel is meant to
- *  be dismissal, not a reason to lose what was already fetched. */
+ *  be dismissal, not a reason to lose what was already fetched.
+ *
+ *  Both halves are kept, not just the visible one: switching to YouTube and
+ *  back is a glance, and it should not cost a re-fetch of a wishlist that was
+ *  already on screen. */
 export interface WishlistCache {
+  /** Which half is showing. Held here so it survives with the rest. */
+  tab: SourceId
   fan: Fan | null
   items: WishlistItem[]
   token: string
   more: boolean
+  yt: YTWishlistCache
 }
 
-export const EMPTY_WISHLIST_CACHE: WishlistCache = { fan: null, items: [], token: '', more: false }
+export const EMPTY_WISHLIST_CACHE: WishlistCache = {
+  tab: 'bandcamp', fan: null, items: [], token: '', more: false, yt: EMPTY_YT_CACHE,
+}
 
 interface Props {
   canEdit: boolean
@@ -29,15 +41,17 @@ interface Props {
   cache: WishlistCache
   onCacheChange: Dispatch<SetStateAction<WishlistCache>>
   onClose: () => void
-  onAdd: (refs: TrackRef[]) => Promise<void>
+  onAdd: (payload: AddPayload) => Promise<void>
 }
 
 /**
- * Browse any Bandcamp user's wishlist and pull releases into the playlist.
- * Albums can be added whole, or expanded in place to pick individual songs.
+ * Browse somebody else's collection and pull tracks into the playlist, from
+ * either source: a Bandcamp user's wishlist, or a YouTube account's public
+ * playlists. Releases can be added whole, or expanded in place to pick
+ * individual songs.
  */
 export function WishlistSidebar({ canEdit, currentPlaylistId, cache, onCacheChange, onClose, onAdd }: Props) {
-  const { fan, items, token, more } = cache
+  const { tab, fan, items, token, more } = cache
   // Other playlists this item could go to instead of (or as well as) the one
   // that is open. Fetched once, the "+" next to each item covers the open
   // playlist already, this is only for sending a copy somewhere else.
@@ -50,9 +64,20 @@ export function WishlistSidebar({ canEdit, currentPlaylistId, cache, onCacheChan
       .catch(() => {}) // the extra button just won't have anywhere to offer
   }, [currentPlaylistId])
 
-  const addToOtherPlaylist = useCallback(async (playlistId: number, refs: TrackRef[]) => {
-    await api.addTracks(playlistId, { items: refs })
+  const addToOtherPlaylist = useCallback(async (playlistId: number, payload: AddPayload) => {
+    await api.addTracks(playlistId, payload)
   }, [])
+
+  const setTab = useCallback((next: SourceId) => {
+    onCacheChange((prev) => ({ ...prev, tab: next }))
+  }, [onCacheChange])
+
+  const setYTCache = useCallback((next: YTWishlistCache | ((prev: YTWishlistCache) => YTWishlistCache)) => {
+    onCacheChange((prev) => ({
+      ...prev,
+      yt: typeof next === 'function' ? next(prev.yt) : next,
+    }))
+  }, [onCacheChange])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   // Which wishlisted album is showing its track list inline, right under its
@@ -72,6 +97,9 @@ export function WishlistSidebar({ canEdit, currentPlaylistId, cache, onCacheChan
   const preview = usePreview()
   const { user } = useAuth()
   const linked = user?.bandcamp_username ?? ''
+  // Browsing an account's playlists needs the Data API, so without a key there
+  // is nothing behind the YouTube tab and it is not offered.
+  const ytAvailable = capsOf(useSourceCaps(), 'youtube').search
   const [looking, setLooking] = useState(false)
 
   const loadPage = useCallback(async (fanId: number, nextToken: string, replace: boolean) => {
@@ -131,7 +159,7 @@ export function WishlistSidebar({ canEdit, currentPlaylistId, cache, onCacheChan
     setBusy(item.tralbum_id)
     setError('')
     try {
-      await onAdd([{ type: item.tralbum_type, id: item.tralbum_id, band_id: item.band_id }])
+      await onAdd({ items: [{ type: item.tralbum_type, id: item.tralbum_id, band_id: item.band_id }] })
       setAdded((prev) => new Set(prev).add(item.tralbum_id))
     } catch (e) {
       setError((e as Error).message)
@@ -145,11 +173,10 @@ export function WishlistSidebar({ canEdit, currentPlaylistId, cache, onCacheChan
     try {
       if (item.tralbum_type === 't') {
         preview.press({
-          trackId: item.tralbum_id,
-          bandId: item.band_id,
+          ...bcSource(item.tralbum_id, item.band_id),
           title: item.title,
           artist: item.band_name,
-          trackUrl: item.item_url,
+          track_url: item.item_url,
         })
         setPreviewSource({ type: 't', id: item.tralbum_id, trackId: item.tralbum_id })
         return
@@ -163,14 +190,13 @@ export function WishlistSidebar({ canEdit, currentPlaylistId, cache, onCacheChan
         return
       }
       preview.press({
-        trackId: first.track_id,
-        bandId: first.band_id || item.band_id,
+        ...bcSource(first.track_id, first.band_id || item.band_id),
         title: first.title,
         artist: first.artist,
-        albumTitle: detail.title,
-        artId: first.art_id,
+        album_title: detail.title,
+        art_id: first.art_id,
         duration: first.duration,
-        trackUrl: first.track_url,
+        track_url: first.track_url,
       })
       setPreviewSource({ type: 'a', id: item.tralbum_id, trackId: first.track_id })
     } catch (e) {
@@ -182,11 +208,11 @@ export function WishlistSidebar({ canEdit, currentPlaylistId, cache, onCacheChan
    *  loaded in the player right now. */
   const isRowPlaying = (type: 'a' | 't', id: number) => (
     !!previewSource && previewSource.type === type && previewSource.id === id
-    && preview.isPreviewing(previewSource.trackId)
+    && preview.isPreviewing('bandcamp', String(previewSource.trackId))
   )
 
   const clearFan = () => {
-    onCacheChange({ fan: null, items: [], token: '', more: false })
+    onCacheChange((prev) => ({ ...prev, fan: null, items: [], token: '', more: false }))
     // Prefill with the linked account rather than clearing to nothing, so the
     // usual next action is one click.
     setInput(linked)
@@ -204,12 +230,14 @@ export function WishlistSidebar({ canEdit, currentPlaylistId, cache, onCacheChan
     <>
       <div className="sidebar-backdrop" onClick={close} role="presentation" />
 
-      <aside className="sidebar" aria-label="Bandcamp wishlist">
+      <aside className="sidebar" aria-label="Browse a collection">
         <div className="sidebar-head">
           <h2 className="truncate" style={{ flex: 1 }}>
-            {fan ? `${fan.username}'s wishlist` : 'Browse a wishlist'}
+            {tab === 'youtube'
+              ? (cache.yt.channel ? `${cache.yt.channel.title}'s playlists` : 'Browse YouTube playlists')
+              : (fan ? `${fan.username}'s wishlist` : 'Browse a wishlist')}
           </h2>
-          {fan && (
+          {tab === 'bandcamp' && fan && (
             <>
               <button
                 className="icon"
@@ -229,6 +257,38 @@ export function WishlistSidebar({ canEdit, currentPlaylistId, cache, onCacheChan
         </div>
 
         <div className="sidebar-body">
+          {/* The source toggle sits above everything else in the panel: it
+              decides what the rest of it even is. Only shown when this server
+              can actually browse YouTube, which needs an API key. */}
+          {ytAvailable && (
+            <div className="tabs source-tabs" role="tablist" aria-label="Browse which source">
+              <button
+                role="tab"
+                aria-selected={tab === 'bandcamp'}
+                onClick={() => setTab('bandcamp')}
+              >
+                <Icon name="bandcamp" size={13} /> Bandcamp
+              </button>
+              <button
+                role="tab"
+                aria-selected={tab === 'youtube'}
+                onClick={() => setTab('youtube')}
+              >
+                <Icon name="youtube" size={13} /> YouTube
+              </button>
+            </div>
+          )}
+
+          {tab === 'youtube' ? (
+            <YouTubeWishlist
+              canEdit={canEdit}
+              cache={cache.yt}
+              onCacheChange={setYTCache}
+              onAdd={onAdd}
+              otherPlaylists={otherPlaylists}
+              onAddToOther={addToOtherPlaylist}
+            />
+          ) : (
           <div className="col">
               {!fan && (
                 <div className="col" style={{ gap: 8 }}>
@@ -346,7 +406,7 @@ export function WishlistSidebar({ canEdit, currentPlaylistId, cache, onCacheChan
                           added={isAdded}
                           busy={busy === item.tralbum_id}
                           onAddAlbum={() => addWhole(item)}
-                          onAddTrack={(ref) => onAdd([ref])}
+                          onAddTrack={(ref) => onAdd({ items: [ref] })}
                         />
                       ) : (
                         <button
@@ -367,7 +427,7 @@ export function WishlistSidebar({ canEdit, currentPlaylistId, cache, onCacheChan
                         disabled={busy !== null}
                         label={item.title}
                         onAdd={(playlistId) => addToOtherPlaylist(playlistId,
-                          [{ type: item.tralbum_type, id: item.tralbum_id, band_id: item.band_id }])}
+                          { items: [{ type: item.tralbum_type, id: item.tralbum_id, band_id: item.band_id }] })}
                       />
                     </div>
 
@@ -390,6 +450,7 @@ export function WishlistSidebar({ canEdit, currentPlaylistId, cache, onCacheChan
                 <button onClick={() => loadPage(fan.fan_id, token, false)}>Load more</button>
               )}
           </div>
+          )}
         </div>
       </aside>
     </>

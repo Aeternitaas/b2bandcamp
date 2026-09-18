@@ -55,26 +55,29 @@ func main() {
 	// YouTube registers with or without a key: without one it still adds videos
 	// by link through the keyless oEmbed endpoint, it just cannot report their
 	// duration or expand a playlist link.
-	yt := youtube.New(cfg.YouTubeAPIKey)
+	yt := youtube.New(cfg.YouTubeAPIKey, youtube.WithExtractor(cfg.YTDLPPath))
 	sources.Register(yt)
 	if yt.HasAPIKey() {
-		log.Print("youtube: using the Data API (durations, playlist expansion)")
+		log.Print("youtube: using the Data API (durations, search, playlist and channel browsing)")
 	} else {
-		log.Print("youtube: no YOUTUBE_API_KEY, falling back to oEmbed (no durations)")
+		log.Print("youtube: no YOUTUBE_API_KEY, falling back to oEmbed (no durations, no search or browsing)")
+	}
+	// Analysis needs the audio itself, and only an extractor supplies it.
+	// Without one, YouTube rows still play, but in YouTube's embedded player,
+	// and the browser never receives samples to analyse.
+	if yt.CanStream() {
+		log.Print("youtube: audio extractor found, playback and analysis enabled")
+	} else {
+		log.Print("youtube: no yt-dlp found, rows play in the embedded player and cannot be analysed")
 	}
 
 	// Create an instance of the apiHandler which serves the bandcamp portion of the application
-	apiHandler := api.NewServer(cfg, st, bc, sources).Routes()
-
-	// Allocate and set the new, empty HTTP request multiplexer/router.
-	mux := http.NewServeMux()
-	mux.Handle("/api/", apiHandler)
-	mux.Handle("/", spaHandler(cfg.WebDir))
+	apiServer := api.NewServer(cfg, st, bc, yt, sources)
 
 	// Then, create and serve HTTP API server.
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,
-		Handler:           mux,
+		Handler:           routes(apiServer, cfg.WebDir),
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      60 * time.Second,
@@ -124,6 +127,19 @@ func init() {
 
 // spaHandler serves the built React app, falling back to index.html so
 // client-side routes like /p/12 and /s/<token> survive a page reload.
+// routes joins the API and the web app into one handler.
+//
+// Both halves carry the security headers, and the web app needs them most. A
+// browser enforces the Content-Security-Policy, the Referrer-Policy and the
+// frame rules only from the response that delivers the page. If only /api/
+// carries them, the page runs with no policy at all.
+func routes(apiServer *api.Server, webDir string) http.Handler {
+	mux := http.NewServeMux()
+	mux.Handle("/api/", apiServer.Routes())
+	mux.Handle("/", apiServer.SecurityHeaders(spaHandler(webDir)))
+	return mux
+}
+
 func spaHandler(root string) http.Handler {
 	fileServer := http.FileServer(http.Dir(root))
 

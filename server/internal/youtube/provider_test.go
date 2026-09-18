@@ -77,7 +77,10 @@ func TestParseISODuration(t *testing.T) {
 }
 
 func TestMatchAndCaps(t *testing.T) {
-	p := New("")
+	// An extractor that is certainly not installed, so this exercises the
+	// unconfigured instance rather than whatever the machine running the tests
+	// happens to have on PATH.
+	p := New("", WithExtractor("/nonexistent/yt-dlp"))
 
 	if !p.Match("https://youtu.be/dQw4w9WgXcQ") {
 		t.Error("a youtu.be link must match")
@@ -88,19 +91,50 @@ func TestMatchAndCaps(t *testing.T) {
 
 	caps := p.Caps()
 	if caps.Stream {
-		t.Error("this server must never claim it can stream YouTube audio")
+		t.Error("with no extractor there is no audio to hand over")
 	}
 	if caps.Analyze {
-		t.Error("analysis needs same-origin samples, which YouTube never provides")
+		t.Error("analysis needs the samples, which without an extractor never arrive")
 	}
 	if !caps.Embed {
-		t.Error("playback is the embedded player, so Embed must be set")
+		t.Error("with no audio of its own, playback falls back to the embedded player")
+	}
+	if caps.Search {
+		t.Error("search needs an api key")
+	}
+	if len(p.CSP().Frame) == 0 {
+		t.Error("the embedded player needs its origin in frame-src")
+	}
+}
+
+// With an extractor installed the answers invert: this server can hand over the
+// audio, so it can also analyse it, and the embedded player is not used. Any
+// binary stands in for yt-dlp here, because only whether one was found changes
+// the capabilities.
+func TestCapsWithExtractor(t *testing.T) {
+	p := New("a-key", WithExtractor("/bin/sh"))
+	if !p.CanStream() {
+		t.Fatal("an extractor that exists must be found")
 	}
 
-	// The optional streaming interface must not be satisfied: implementing it
-	// would invite a caller to try to relay the audio.
-	if _, isStreamer := any(p).(source.Streamer); isStreamer {
-		t.Error("Provider must not implement source.Streamer")
+	caps := p.Caps()
+	if !caps.Stream || !caps.Analyze {
+		t.Errorf("streaming and analysis are one question, got %+v", caps)
+	}
+	if caps.Embed {
+		t.Error("nothing is embedded when the audio comes from this server")
+	}
+	if !caps.Search {
+		t.Error("a key enables search")
+	}
+
+	// An origin nothing loads from is still an origin the policy permits.
+	if len(p.CSP().Frame) != 0 || len(p.CSP().Script) != 0 {
+		t.Error("with no embedded player the policy must not name its origins")
+	}
+
+	if _, isStreamer := any(p).(source.Streamer); !isStreamer {
+		t.Error("Provider must satisfy source.Streamer")
 	}
 }
 
